@@ -1,0 +1,17 @@
+sudo: false
+language: c
+addons:
+  apt:
+    packages:
+      - libipc-run-perl
+      - libpam0g-dev
+      - libperl-dev
+      - tcl-dev
+      - docbook
+      - docbook-dsssl
+      - docbook-xsl
+      - libxml2-utils
+      - openjade
+      - opensp
+      - xsltproc
+script: ./configure --enable-cassert --enable-nls --enable-tap-tests --enable-thread-safety --with-gssapi --with-ldap --with-libxml --with-libxslt --with-openssl --with-pam --with-perl --with-python --with-tcl --with-uuid=ossp CPPFLAGS=-D_FORTIFY_SOURCE=2 && make world && make check-world
