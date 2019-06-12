@@ -136,6 +136,7 @@ static char *pwfilename = NULL;
 static char *superuser_password = NULL;
 static const char *authmethodhost = NULL;
 static const char *authmethodlocal = NULL;
+static bool bare = false;
 static bool debug = false;
 static bool noclean = false;
 static bool do_sync = true;
@@ -2962,6 +2963,10 @@ initialize_data_directory(void)
 	/* Now create all the text config files */
 	setup_config();
 
+	/* If bare data directory requested, we are done here. */
+	if (bare)
+		return;
+
 	/* Bootstrap template1 */
 	bootstrap_template1();
 
@@ -3053,6 +3058,7 @@ main(int argc, char *argv[])
 		{"wal-segsize", required_argument, NULL, 12},
 		{"data-checksums", no_argument, NULL, 'k'},
 		{"allow-group-access", no_argument, NULL, 'g'},
+		{"bare", no_argument, NULL, 'b'},
 		{NULL, 0, NULL, 0}
 	};
 
@@ -3094,7 +3100,7 @@ main(int argc, char *argv[])
 
 	/* process command-line options */
 
-	while ((c = getopt_long(argc, argv, "dD:E:kL:nNU:WA:sST:X:g", long_options, &option_index)) != -1)
+	while ((c = getopt_long(argc, argv, "bdD:E:kL:nNU:WA:sST:X:g", long_options, &option_index)) != -1)
 	{
 		switch (c)
 		{
@@ -3116,6 +3122,9 @@ main(int argc, char *argv[])
 				break;
 			case 11:
 				authmethodhost = pg_strdup(optarg);
+				break;
+			case 'b':
+				bare = true;
 				break;
 			case 'D':
 				pg_data = pg_strdup(optarg);

@@ -248,6 +248,7 @@ bool		restart_after_crash = true;
 
 /* PIDs of special child processes; 0 when not running */
 static pid_t StartupPID = 0,
+//			BaseBackupPID = 0,
 			BgWriterPID = 0,
 			CheckpointerPID = 0,
 			WalWriterPID = 0,
@@ -572,6 +573,8 @@ PostmasterMain(int argc, char *argv[])
 	bool		listen_addr_saved = false;
 	int			i;
 	char	   *output_config_variable = NULL;
+	struct stat stat_buf;
+	bool		basebackup_signal_file_found = false;
 
 	InitProcessGlobals();
 
@@ -877,11 +880,26 @@ PostmasterMain(int argc, char *argv[])
 	/* Verify that DataDir looks reasonable */
 	checkDataDir();
 
-	/* Check that pg_control exists */
-	checkControlFile();
-
 	/* And switch working directory into it */
 	ChangeToDataDir();
+
+	if (stat("basebackup.signal", &stat_buf) == 0)
+	{
+		int         fd;
+
+		fd = BasicOpenFilePerm(STANDBY_SIGNAL_FILE, O_RDWR | PG_BINARY,
+							   S_IRUSR | S_IWUSR);
+		if (fd >= 0)
+		{
+			(void) pg_fsync(fd);
+			close(fd);
+		}
+		basebackup_signal_file_found = true;
+	}
+
+	/* Check that pg_control exists */
+	if (!basebackup_signal_file_found)
+		checkControlFile();
 
 	/*
 	 * Check for invalid combinations of GUC settings.
@@ -961,7 +979,8 @@ PostmasterMain(int argc, char *argv[])
 	 * processes will inherit the correct function pointer and not need to
 	 * repeat the test.
 	 */
-	LocalProcessControlFile(false);
+	if (!basebackup_signal_file_found)
+		LocalProcessControlFile(false);
 
 	/*
 	 * Initialize SSL library, if specified.
@@ -1362,6 +1381,11 @@ PostmasterMain(int argc, char *argv[])
 	 * see what's happening.
 	 */
 	AddToDataDirLockFile(LOCK_FILE_LINE_PM_STATUS, PM_STATUS_STARTING);
+
+	if (basebackup_signal_file_found)
+	{
+		elog(FATAL, "TODO");
+	}
 
 	/*
 	 * We're ready to rock and roll...
