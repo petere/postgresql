@@ -3370,9 +3370,20 @@ main(int argc, char *argv[])
 	/* translator: This is a placeholder in a shell command. */
 	appendPQExpBuffer(start_db_cmd, " -l %s start", _("logfile"));
 
-	printf(_("\nSuccess. You can now start the database server using:\n\n"
-			 "    %s\n\n"),
-		   start_db_cmd->data);
+	if (!bare)
+	{
+		printf(_("\nSuccess. You can now start the database server using:\n\n"
+				 "    %s\n\n"),
+			   start_db_cmd->data);
+	}
+	else
+	{
+		printf(_("\nSo far so good. Now configure the replication connection in\n"
+				 "postgresql.conf, create basebackup.signal, and then start the database\n"
+				 "server using:\n\n"
+				 "    %s\n\n"),
+			   start_db_cmd->data);
+	}
 
 	destroyPQExpBuffer(start_db_cmd);
 
