@@ -248,7 +248,7 @@ bool		restart_after_crash = true;
 
 /* PIDs of special child processes; 0 when not running */
 static pid_t StartupPID = 0,
-//			BaseBackupPID = 0,
+			BaseBackupPID = 0,
 			BgWriterPID = 0,
 			CheckpointerPID = 0,
 			WalWriterPID = 0,
@@ -540,6 +540,7 @@ static void ShmemBackendArrayRemove(Backend *bn);
 #endif							/* EXEC_BACKEND */
 
 #define StartupDataBase()		StartChildProcess(StartupProcess)
+#define StartBaseBackup()		StartChildProcess(BaseBackupProcess)
 #define StartBackgroundWriter() StartChildProcess(BgWriterProcess)
 #define StartCheckpointer()		StartChildProcess(CheckpointerProcess)
 #define StartWalWriter()		StartChildProcess(WalWriterProcess)
@@ -1384,7 +1385,13 @@ PostmasterMain(int argc, char *argv[])
 
 	if (basebackup_signal_file_found)
 	{
-		elog(FATAL, "TODO");
+		StartBaseBackup();
+		// TODO wait until done
+		do
+		{
+			sleep(10);
+		}
+		while (BaseBackupPID != 0);
 	}
 
 	/*
@@ -2655,6 +2662,8 @@ SIGHUP_handler(SIGNAL_ARGS)
 		SignalChildren(SIGHUP);
 		if (StartupPID != 0)
 			signal_child(StartupPID, SIGHUP);
+		if (BaseBackupPID != 0)
+			signal_child(BaseBackupPID, SIGHUP);
 		if (BgWriterPID != 0)
 			signal_child(BgWriterPID, SIGHUP);
 		if (CheckpointerPID != 0)
@@ -2806,6 +2815,8 @@ pmdie(SIGNAL_ARGS)
 
 			if (StartupPID != 0)
 				signal_child(StartupPID, SIGTERM);
+			if (BaseBackupPID != 0)
+				signal_child(BaseBackupPID, SIGTERM);
 			if (BgWriterPID != 0)
 				signal_child(BgWriterPID, SIGTERM);
 			if (WalReceiverPID != 0)
@@ -3018,6 +3029,18 @@ reaper(SIGNAL_ARGS)
 			sd_notify(0, "READY=1");
 #endif
 
+			continue;
+		}
+
+		/*
+		 * Was it the base backup process?
+		 */
+		if (pid == BaseBackupPID)
+		{
+			BaseBackupPID = 0;
+			if (!EXIT_STATUS_0(exitstatus) && !EXIT_STATUS_1(exitstatus))
+				HandleChildCrash(pid, exitstatus,
+								 _("base backup process"));
 			continue;
 		}
 
@@ -3540,6 +3563,18 @@ HandleChildCrash(int pid, int exitstatus, const char *procname)
 		StartupStatus = STARTUP_SIGNALED;
 	}
 
+	/* Take care of the base backup process too */
+	if (pid == BaseBackupPID)
+		BaseBackupPID = 0;
+	else if (BaseBackupPID != 0 && take_action)
+	{
+		ereport(DEBUG2,
+				(errmsg_internal("sending %s to process %d",
+								 (SendStop ? "SIGSTOP" : "SIGQUIT"),
+								 (int) BaseBackupPID)));
+		signal_child(BaseBackupPID, (SendStop ? SIGSTOP : SIGQUIT));
+	}
+
 	/* Take care of the bgwriter too */
 	if (pid == BgWriterPID)
 		BgWriterPID = 0;
@@ -3774,6 +3809,7 @@ PostmasterStateMachine(void)
 		if (CountChildren(BACKEND_TYPE_NORMAL | BACKEND_TYPE_WORKER) == 0 &&
 			StartupPID == 0 &&
 			WalReceiverPID == 0 &&
+			BaseBackupPID == 0 &&
 			BgWriterPID == 0 &&
 			(CheckpointerPID == 0 ||
 			 (!FatalError && Shutdown < ImmediateShutdown)) &&
@@ -3868,6 +3904,7 @@ PostmasterStateMachine(void)
 			/* These other guys should be dead already */
 			Assert(StartupPID == 0);
 			Assert(WalReceiverPID == 0);
+			Assert(BaseBackupPID == 0);
 			Assert(BgWriterPID == 0);
 			Assert(CheckpointerPID == 0);
 			Assert(WalWriterPID == 0);
@@ -4051,6 +4088,8 @@ TerminateChildren(int signal)
 		if (signal == SIGQUIT || signal == SIGKILL)
 			StartupStatus = STARTUP_SIGNALED;
 	}
+	if (BaseBackupPID != 0)
+		signal_child(BgWriterPID, signal);
 	if (BgWriterPID != 0)
 		signal_child(BgWriterPID, signal);
 	if (CheckpointerPID != 0)
@@ -5423,6 +5462,10 @@ StartChildProcess(AuxProcType type)
 			case StartupProcess:
 				ereport(LOG,
 						(errmsg("could not fork startup process: %m")));
+				break;
+			case BaseBackupProcess:
+				ereport(LOG,
+						(errmsg("could not fork base backup process: %m")));
 				break;
 			case BgWriterProcess:
 				ereport(LOG,
