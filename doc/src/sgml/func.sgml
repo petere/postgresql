@@ -12048,7 +12048,11 @@ table2-mapping
        </row>
        <row>
         <entry><literal>like_regex</literal></entry>
-        <entry>Tests pattern matching with POSIX regular expressions</entry>
+        <entry>
+          Tests pattern matching with POSIX regular expressions
+          (<xref linkend="functions-posix-regexp"/>).  Supported flags
+          are <literal>i</literal>, <literal>s</literal>, <literal>m</literal>,
+          <literal>x</literal> and <literal>q</literal>.</entry>
         <entry><literal>["abc", "abd", "aBdC", "abdacb", "babc"]</literal></entry>
         <entry><literal>$[*] ? (@ like_regex "^ab.*c" flag "i")</literal></entry>
         <entry><literal>"abc", "aBdC", "abdacb"</literal></entry>
@@ -22427,12 +22431,12 @@ CREATE EVENT TRIGGER test_table_rewrite_oid
     The <function>pg_mcv_list_items</function> function can be used like this:
 
 <programlisting>
-SELECT m.* FROM pg_statistic_ext,
-                pg_mcv_list_items(stxmcv) m WHERE stxname = 'stts';
+SELECT m.* FROM pg_statistic_ext join pg_statistic_ext_data on (oid = stxoid),
+                pg_mcv_list_items(stxdmcv) m WHERE stxname = 'stts';
 </programlisting>
 
      Values of the <type>pg_mcv_list</type> can be obtained only from the
-     <literal>pg_statistic_ext.stxmcv</literal> column.
+     <literal>pg_statistic_ext_data.stxdmcv</literal> column.
    </para>
   </sect2>
 

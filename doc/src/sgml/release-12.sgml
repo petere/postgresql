@@ -518,38 +518,25 @@ Author: Robert Haas <rhaas@postgresql.org>
 <!--
 Author: Michael Paquier <michael@paquier.xyz>
 2019-02-08 [3677a0b26] Add pg_partition_root to display top-most parent of a pa
--->
-
-       <para>
-        Add function <link
-        linkend="functions-info-partition"><function>pg_partition_root()</function></link>
-        to return top-most parent of a partition tree (Michaël Paquier)
-       </para>
-      </listitem>
-
-      <listitem>
-<!--
 Author: Alvaro Herrera <alvherre@alvh.no-ip.org>
 2019-03-04 [b96f6b194] pg_partition_ancestors
--->
-
-       <para>
-        Add function <link
-        linkend="functions-info-partition"><function>pg_partition_ancestors()</function></link>
-        to report all ancestors of a partition (Álvaro Herrera)
-       </para>
-      </listitem>
-
-      <listitem>
-<!--
 Author: Michael Paquier <michael@paquier.xyz>
 2018-10-30 [d5eec4eef] Add pg_partition_tree to display information about parti
 -->
 
        <para>
-        Add function <link
+        Add partition introspection functions (Michaël Paquier, Álvaro
+        Herrera, Amit Langote)
+       </para>
+
+       <para>
+        New function <link
+        linkend="functions-info-partition"><function>pg_partition_root()</function></link>
+        returns the top-most parent of a partition tree, <link
+        linkend="functions-info-partition"><function>pg_partition_ancestors()</function></link>
+        reports all ancestors of a partition, and <link
         linkend="functions-info-partition"><function>pg_partition_tree()</function></link>
-        to display information about partitions (Amit Langote)
+        displays information about partitions.
        </para>
       </listitem>
 
@@ -619,22 +606,64 @@ Author: Tom Lane <tgl@sss.pgh.pa.us>
 
       <listitem>
 <!--
-Author: Alexander Korotkov <akorotkov@postgresql.org>
-2018-07-28 [d2086b08b] Reduce path length for locking leaf B-tree pages during 
+Author: Peter Geoghegan <pg@bowt.ie>
+2019-03-20 [dd299df81] Make heap TID a tiebreaker nbtree index column.
+Author: Peter Geoghegan <pg@bowt.ie>
+2019-03-20 [fab250243] Consider secondary factors during nbtree splits.
 Author: Peter Geoghegan <pg@bowt.ie>
 2019-03-25 [f21668f32] Add "split after new tuple" nbtree optimization.
 -->
 
        <para>
-        Improve speed of btree index insertions (Peter Geoghegan,
-        Alexander Korotkov)
+        Improve performance and space utilization of btree indexes with
+        many duplicates (Peter Geoghegan, Heikki Linnakangas)
        </para>
 
        <para>
-        The new code improves the space-efficiency of page splits,
-        reduces locking overhead, and gives better performance for
-        <command>UPDATE</command>s and <command>DELETE</command>s on
-        indexes with many duplicates.
+        Previously, duplicate index entries were stored unordered within
+        their duplicate groups.  This caused overhead during index
+        inserts, wasted space due to excessive page splits, and reduced
+        <command>VACUUM</command>'s ability to recycle entire pages.
+        Duplicate index entries are now sorted in heap-storage order.
+       </para>
+
+       <para>
+        Indexes <application>pg_upgraded</application> from previous
+        releases will not have these benefits.
+       </para>
+      </listitem>
+
+      <listitem>
+<!--
+see commits above
+-->
+
+       <para>
+        Allow multi-column btree indexes to be smaller (Peter Geoghegan,
+        Heikki Linnakangas)
+       </para>
+
+       <para>
+        Internal pages and min/max leaf page indicators now only store
+        index keys until the change key, rather than all indexed keys.
+        This also improves the locality of index access.
+       </para>
+
+       <para>
+        Indexes <application>pg_upgraded</application> from previous
+        releases will not have these benefits.
+       </para>
+      </listitem>
+
+      <listitem>
+<!--
+Author: Alexander Korotkov <akorotkov@postgresql.org>
+2018-07-28 [d2086b08b] Reduce path length for locking leaf B-tree pages during 
+-->
+
+       <para>
+        Improve speed of btree index insertions by reducing locking
+        overhead (Alexander Korotkov)
        </para>
       </listitem>
 
@@ -688,25 +717,6 @@ Author: Tom Lane <tgl@sss.pgh.pa.us>
        <para>
         Allow index-only scans to be more efficient on indexes with many
         columns (Konstantin Knizhnik)
-       </para>
-      </listitem>
-
-      <listitem>
-<!--
-Author: Peter Geoghegan <pg@bowt.ie>
-2019-03-20 [dd299df81] Make heap TID a tiebreaker nbtree index column.
-Author: Peter Geoghegan <pg@bowt.ie>
-2019-03-20 [fab250243] Consider secondary factors during nbtree splits.
--->
-
-       <para>
-        Have new btree indexes sort duplicate index entries in heap-storage
-        order (Peter Geoghegan, Heikki Linnakangas)
-       </para>
-
-       <para>
-        Indexes <application>pg_upgraded</application> from previous
-        releases will not have this ordering.
        </para>
       </listitem>
 
@@ -825,7 +835,19 @@ Author: Tom Lane <tgl@sss.pgh.pa.us>
 -->
 
        <para>
-        Improve optimization of self-joins (Tom Lane)
+        Improve optimization of self-joins involving columns of type tid (Tom Lane)
+       </para>
+      </listitem>
+
+      <listitem>
+<!--
+Author: Tom Lane <tgl@sss.pgh.pa.us>
+2019-03-25 [8edd0e794] Suppress Append and MergeAppend plan nodes that have a s
+-->
+
+       <para>
+        Improve optimization of partition and <literal>UNION ALL</literal>
+        queries that have only a single child (David Rowley)
        </para>
       </listitem>
 
@@ -1488,7 +1510,8 @@ Author: Michael Paquier <michael@paquier.xyz>
        </para>
 
        <para>
-        This prevents unauthorized locking delays.
+        This prevents unauthorized locking, which could interfere with
+        user queries.
        </para>
       </listitem>
 
@@ -1505,7 +1528,8 @@ Author: Michael Paquier <michael@paquier.xyz>
        </para>
 
        <para>
-        This prevents unauthorized locking delays.
+        This prevents unauthorized locking, which could interfere with
+        user queries.
        </para>
       </listitem>
 
@@ -2090,8 +2114,8 @@ Author: Tom Lane <tgl@sss.pgh.pa.us>
       </para>
 
       <para>
-       This adds additional stemming languages to <link
-       linkend="textsearch">full text search</link>.
+       This adds stemming for Arabic, Indonesian, Irish, Lithuanian, Nepali,
+       and Tami to <link linkend="textsearch">full text search</link>.
       </para>
      </listitem>
 
@@ -2430,6 +2454,23 @@ Author: Peter Eisentraut <peter_e@gmx.net>
 
      <listitem>
 <!--
+Author: Michael Paquier <michael@paquier.xyz>
+2019-01-31 [00d1e88d3] Add - -min-xid-age and - -min-mxid-age options to vacuumdb
+-->
+
+      <para>
+       Allow <xref linkend="app-vacuumdb"/> to select tables for vacuum
+       based on their wraparound horizon (Nathan Bossart)
+      </para>
+
+      <para>
+       The options are <option>--min-xid-age</option> and
+       <option>--min-mxid-age</option>.
+      </para>
+     </listitem>
+
+     <listitem>
+<!--
 Author: Peter Eisentraut <peter@eisentraut.org>
 2019-04-01 [cc8d41511] Unified logging system for command-line programs
 -->
@@ -2590,23 +2631,6 @@ Author: Peter Eisentraut <peter_e@gmx.net>
      <listitem>
 <!--
 Author: Michael Paquier <michael@paquier.xyz>
-2019-01-31 [00d1e88d3] Add - -min-xid-age and - -min-mxid-age options to vacuumdb
--->
-
-      <para>
-       Allow <xref linkend="app-vacuumdb"/> to select tables for vacuum
-       based on their wraparound horizon (Nathan Bossart)
-      </para>
-
-      <para>
-       The options are <option>--min-xid-age</option> and
-       <option>--min-mxid-age</option>.
-      </para>
-     </listitem>
-
-     <listitem>
-<!--
-Author: Michael Paquier <michael@paquier.xyz>
 2019-01-08 [354e95d1f] Add - -disable-page-skipping and - -skip-locked to vacuumd
 -->
 
@@ -2687,24 +2711,6 @@ Author: Tom Lane <tgl@sss.pgh.pa.us>
       <para>
        This is controlled by <option>--socketdir</option>;  the default
        is the current directory.
-      </para>
-     </listitem>
-
-     <listitem>
-<!--
-Author: Tom Lane <tgl@sss.pgh.pa.us>
-2018-09-13 [23bd3cec6] Attempt to identify system timezone by reading /etc/loca
--->
-
-      <para>
-       Have <xref linkend="app-initdb"/> determine the local timezone
-       from the <filename>/etc/localtime</filename> symbolic link,
-       if it exists (Tom Lane)
-      </para>
-
-      <para>
-       This is more likely to produce the desired time zone string when
-       multiple identical time zones exist.
       </para>
      </listitem>
 
