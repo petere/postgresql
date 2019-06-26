@@ -4,6 +4,7 @@
 
 #include "replication/basebackup_client.h"
 #include "replication/walreceiver.h"
+#include "storage/ipc.h"
 #include "utils/guc.h"
 
 void
@@ -11,9 +12,6 @@ BaseBackupMain(void)
 {
 	WalReceiverConn *wrconn = NULL;
 	char	   *err;
-	//WalRcvExecResult *res;
-
-	elog(LOG, "BaseBackupMain()");
 
 	/* Load the libpq-specific functions */
 	load_file("libpqwalreceiver", false);
@@ -26,8 +24,10 @@ BaseBackupMain(void)
 		ereport(ERROR,
 				(errmsg("could not connect to the primary server: %s", err)));
 
-	sleep(10);
-	//res = walrcv_exec("BASE_BACKUP")
+	walrcv_base_backup(wrconn);
 
 	walrcv_disconnect(wrconn);
+
+	elog(LOG, "base backup completed");
+	proc_exit(0);
 }

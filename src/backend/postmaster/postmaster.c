@@ -884,7 +884,7 @@ PostmasterMain(int argc, char *argv[])
 	/* And switch working directory into it */
 	ChangeToDataDir();
 
-	if (stat("basebackup.signal", &stat_buf) == 0)
+	if (stat(BASEBACKUP_SIGNAL_FILE, &stat_buf) == 0)
 	{
 		int         fd;
 
@@ -1385,13 +1385,29 @@ PostmasterMain(int argc, char *argv[])
 
 	if (basebackup_signal_file_found)
 	{
-		StartBaseBackup();
-		// TODO wait until done
-		do
+		BaseBackupPID = StartBaseBackup();
+
+		/*
+		 * XXX wait until done
+		 */
+		while (BaseBackupPID != 0)
 		{
-			sleep(10);
+			PG_SETMASK(&UnBlockSig);
+			sleep(2);
+			PG_SETMASK(&BlockSig);
 		}
-		while (BaseBackupPID != 0);
+
+		/*
+		 * Base backup done, now signal standby mode.  XXX Is there a use for
+		 * switching into (non-standby) recovery here?  How would that be
+		 * configured?
+		 */
+		durable_rename(BASEBACKUP_SIGNAL_FILE, STANDBY_SIGNAL_FILE, FATAL);
+
+		/*
+		 * Reread the control file that came in with the base backup.
+		 */
+		ReadControlFile();
 	}
 
 	/*
@@ -3038,7 +3054,11 @@ reaper(SIGNAL_ARGS)
 		if (pid == BaseBackupPID)
 		{
 			BaseBackupPID = 0;
-			if (!EXIT_STATUS_0(exitstatus) && !EXIT_STATUS_1(exitstatus))
+			if (EXIT_STATUS_0(exitstatus))
+				;
+			else if (EXIT_STATUS_1(exitstatus))
+				elog(FATAL, "base backup failed");
+			else
 				HandleChildCrash(pid, exitstatus,
 								 _("base backup process"));
 			continue;
