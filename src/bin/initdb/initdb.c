@@ -136,7 +136,7 @@ static char *pwfilename = NULL;
 static char *superuser_password = NULL;
 static const char *authmethodhost = NULL;
 static const char *authmethodlocal = NULL;
-static bool bare = false;
+static bool minimal = false;
 static bool debug = false;
 static bool noclean = false;
 static bool do_sync = true;
@@ -2963,9 +2963,21 @@ initialize_data_directory(void)
 	/* Now create all the text config files */
 	setup_config();
 
-	/* If bare data directory requested, we are done here. */
-	if (bare)
+	/*
+	 * If minimal data directory requested, write basebackup.signal, and then
+	 * we are done here.
+	 */
+	if (minimal)
+	{
+		char	   *path;
+		char	   *lines[1] = {NULL};
+
+		path = psprintf("%s/basebackup.signal", pg_data);
+		writefile(path, lines);
+		free(path);
+
 		return;
+	}
 
 	/* Bootstrap template1 */
 	bootstrap_template1();
@@ -3058,7 +3070,7 @@ main(int argc, char *argv[])
 		{"wal-segsize", required_argument, NULL, 12},
 		{"data-checksums", no_argument, NULL, 'k'},
 		{"allow-group-access", no_argument, NULL, 'g'},
-		{"bare", no_argument, NULL, 'b'},
+		{"minimal", no_argument, NULL, 'm'},
 		{NULL, 0, NULL, 0}
 	};
 
@@ -3100,7 +3112,7 @@ main(int argc, char *argv[])
 
 	/* process command-line options */
 
-	while ((c = getopt_long(argc, argv, "bdD:E:kL:nNU:WA:sST:X:g", long_options, &option_index)) != -1)
+	while ((c = getopt_long(argc, argv, "dD:E:kL:mnNU:WA:sST:X:g", long_options, &option_index)) != -1)
 	{
 		switch (c)
 		{
@@ -3122,9 +3134,6 @@ main(int argc, char *argv[])
 				break;
 			case 11:
 				authmethodhost = pg_strdup(optarg);
-				break;
-			case 'b':
-				bare = true;
 				break;
 			case 'D':
 				pg_data = pg_strdup(optarg);
@@ -3157,6 +3166,9 @@ main(int argc, char *argv[])
 				break;
 			case 'L':
 				share_path = pg_strdup(optarg);
+				break;
+			case 'm':
+				minimal = true;
 				break;
 			case 1:
 				locale = pg_strdup(optarg);
@@ -3370,7 +3382,7 @@ main(int argc, char *argv[])
 	/* translator: This is a placeholder in a shell command. */
 	appendPQExpBuffer(start_db_cmd, " -l %s start", _("logfile"));
 
-	if (!bare)
+	if (!minimal)
 	{
 		printf(_("\nSuccess. You can now start the database server using:\n\n"
 				 "    %s\n\n"),
@@ -3379,8 +3391,7 @@ main(int argc, char *argv[])
 	else
 	{
 		printf(_("\nSo far so good. Now configure the replication connection in\n"
-				 "postgresql.conf, create basebackup.signal, and then start the database\n"
-				 "server using:\n\n"
+				 "postgresql.conf, and then start the database server using:\n\n"
 				 "    %s\n\n"),
 			   start_db_cmd->data);
 	}
