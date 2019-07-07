@@ -136,7 +136,7 @@ static char *pwfilename = NULL;
 static char *superuser_password = NULL;
 static const char *authmethodhost = NULL;
 static const char *authmethodlocal = NULL;
-static bool minimal = false;
+static bool replica = false;
 static bool debug = false;
 static bool noclean = false;
 static bool do_sync = true;
@@ -2966,10 +2966,10 @@ initialize_data_directory(void)
 	setup_config();
 
 	/*
-	 * If minimal data directory requested, write basebackup.signal, and then
-	 * we are done here.
+	 * If data directory for replica requested, write basebackup.signal, and
+	 * then we are done here.
 	 */
-	if (minimal)
+	if (replica)
 	{
 		char	   *path;
 		char	   *lines[1] = {NULL};
@@ -3072,7 +3072,7 @@ main(int argc, char *argv[])
 		{"wal-segsize", required_argument, NULL, 12},
 		{"data-checksums", no_argument, NULL, 'k'},
 		{"allow-group-access", no_argument, NULL, 'g'},
-		{"minimal", no_argument, NULL, 'm'},
+		{"replica", no_argument, NULL, 'r'},
 		{NULL, 0, NULL, 0}
 	};
 
@@ -3114,7 +3114,7 @@ main(int argc, char *argv[])
 
 	/* process command-line options */
 
-	while ((c = getopt_long(argc, argv, "dD:E:kL:mnNU:WA:sST:X:g", long_options, &option_index)) != -1)
+	while ((c = getopt_long(argc, argv, "dD:E:kL:nNrU:WA:sST:X:g", long_options, &option_index)) != -1)
 	{
 		switch (c)
 		{
@@ -3160,6 +3160,9 @@ main(int argc, char *argv[])
 			case 'N':
 				do_sync = false;
 				break;
+			case 'r':
+				replica = true;
+				break;
 			case 'S':
 				sync_only = true;
 				break;
@@ -3168,9 +3171,6 @@ main(int argc, char *argv[])
 				break;
 			case 'L':
 				share_path = pg_strdup(optarg);
-				break;
-			case 'm':
-				minimal = true;
 				break;
 			case 1:
 				locale = pg_strdup(optarg);
@@ -3384,7 +3384,7 @@ main(int argc, char *argv[])
 	/* translator: This is a placeholder in a shell command. */
 	appendPQExpBuffer(start_db_cmd, " -l %s start", _("logfile"));
 
-	if (!minimal)
+	if (!replica)
 	{
 		printf(_("\nSuccess. You can now start the database server using:\n\n"
 				 "    %s\n\n"),
