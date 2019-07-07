@@ -1393,7 +1393,7 @@ PostmasterMain(int argc, char *argv[])
 		while (BaseBackupPID != 0)
 		{
 			PG_SETMASK(&UnBlockSig);
-			sleep(2);
+			pg_usleep(1000000L);
 			PG_SETMASK(&BlockSig);
 		}
 
