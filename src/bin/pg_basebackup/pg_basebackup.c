@@ -1469,6 +1469,8 @@ ReceiveAndUnpackTarFile(PGconn *conn, PGresult *res, int rownum)
 						fprintf(stderr,
 								_("%s: could not set permissions on directory \"%s\": %s\n"),
 								progname, filename, strerror(errno));
+#else
+					(void) filemode;
 #endif
 				}
 				else if (copybuf[156] == '2')
