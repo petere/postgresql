@@ -244,10 +244,10 @@ esac
 
 pg_ctl start -l "$logdir/postmaster2.log" -o "$POSTMASTER_OPTS" -w
 
-case $testhost in
-	MINGW*)	cmd /c analyze_new_cluster.bat ;;
-	*)		sh ./analyze_new_cluster.sh ;;
-esac
+#case $testhost in
+#	MINGW*)	cmd /c analyze_new_cluster.bat ;;
+#	*)		sh ./analyze_new_cluster.sh ;;
+#esac
 
 pg_dumpall --no-sync -f "$temp_root"/dump2.sql || pg_dumpall2_status=$?
 pg_ctl -m fast stop
@@ -257,10 +257,10 @@ if [ -n "$pg_dumpall2_status" ]; then
 	exit 1
 fi
 
-case $testhost in
-	MINGW*)	cmd /c delete_old_cluster.bat ;;
-	*)	    sh ./delete_old_cluster.sh ;;
-esac
+#case $testhost in
+#	MINGW*)	cmd /c delete_old_cluster.bat ;;
+#	*)	    sh ./delete_old_cluster.sh ;;
+#esac
 
 if diff "$temp_root"/dump1.sql "$temp_root"/dump2.sql >/dev/null; then
 	echo PASSED
