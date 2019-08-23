@@ -26,6 +26,7 @@
 #include "replication/origin.h"
 
 #ifndef FRONTEND
+#include "miscadmin.h"
 #include "utils/memutils.h"
 #endif
 
@@ -701,7 +702,7 @@ ValidXLogRecordHeader(XLogReaderState *state, XLogRecPtr RecPtr,
  * We assume all of the record (that is, xl_tot_len bytes) has been read
  * into memory at *record.  Also, ValidXLogRecordHeader() has accepted the
  * record's header, which means in particular that xl_tot_len is at least
- * SizeOfXlogRecord.
+ * SizeOfXLogRecord.
  */
 static bool
 ValidXLogRecord(XLogReaderState *state, XLogRecord *record, XLogRecPtr recptr)
@@ -1443,3 +1444,37 @@ RestoreBlockImage(XLogReaderState *record, uint8 block_id, char *page)
 
 	return true;
 }
+
+#ifndef FRONTEND
+
+/*
+ * Extract the FullTransactionId from a WAL record.
+ */
+FullTransactionId
+XLogRecGetFullXid(XLogReaderState *record)
+{
+	TransactionId	xid,
+					next_xid;
+	uint32			epoch;
+
+	/*
+	 * This function is only safe during replay, because it depends on the
+	 * replay state.  See AdvanceNextFullTransactionIdPastXid() for more.
+	 */
+	Assert(AmStartupProcess() || !IsUnderPostmaster);
+
+	xid = XLogRecGetXid(record);
+	next_xid = XidFromFullTransactionId(ShmemVariableCache->nextFullXid);
+	epoch = EpochFromFullTransactionId(ShmemVariableCache->nextFullXid);
+
+	/*
+	 * If xid is numerically greater than next_xid, it has to be from the
+	 * last epoch.
+	 */
+	if (unlikely(xid > next_xid))
+		--epoch;
+
+	return FullTransactionIdFromEpochAndXid(epoch, xid);
+}
+
+#endif

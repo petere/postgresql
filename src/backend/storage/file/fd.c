@@ -269,7 +269,7 @@ static int	nextTempTableSpace = 0;
  * LruInsert	   - put a file at the front of the Lru ring and open it
  * ReleaseLruFile  - Release an fd by closing the last entry in the Lru ring
  * ReleaseLruFiles - Release fd(s) until we're under the max_safe_fds limit
- * AllocateVfd	   - grab a free (or new) file record (from VfdArray)
+ * AllocateVfd	   - grab a free (or new) file record (from VfdCache)
  * FreeVfd		   - free a file record
  *
  * The Least Recently Used ring is a doubly linked list that begins and
@@ -897,7 +897,7 @@ count_usable_fds(int max_to_probe, int *usable_fds, int *already_open)
 
 /*
  * set_max_safe_fds
- *		Determine number of filedescriptors that fd.c is allowed to use
+ *		Determine number of file descriptors that fd.c is allowed to use
  */
 void
 set_max_safe_fds(void)
@@ -1971,10 +1971,6 @@ retry:
 	{
 		/*
 		 * Maintain fileSize and temporary_files_size if it's a temp file.
-		 *
-		 * If seekPos is -1 (unknown), this will do nothing; but we could only
-		 * get here in that state if we're not enforcing temporary_files_size,
-		 * so we don't care.
 		 */
 		if (vfdP->fdstate & FD_TEMP_FILE_LIMIT)
 		{
@@ -3208,7 +3204,8 @@ SyncDataDirectory(void)
  *
  * Errors are reported at level elevel, which might be ERROR or less.
  *
- * See also walkdir in initdb.c, which is a frontend version of this logic.
+ * See also walkdir in file_utils.c, which is a frontend version of this
+ * logic.
  */
 static void
 walkdir(const char *path,

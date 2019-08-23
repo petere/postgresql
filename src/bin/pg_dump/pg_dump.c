@@ -2812,15 +2812,23 @@ dumpDatabase(Archive *fout)
 		appendPQExpBufferStr(creaQry, " ENCODING = ");
 		appendStringLiteralAH(creaQry, encoding, fout);
 	}
-	if (strlen(collate) > 0)
+	if (strlen(collate) > 0 && strcmp(collate, ctype) == 0)
 	{
-		appendPQExpBufferStr(creaQry, " LC_COLLATE = ");
+		appendPQExpBufferStr(creaQry, " LOCALE = ");
 		appendStringLiteralAH(creaQry, collate, fout);
 	}
-	if (strlen(ctype) > 0)
+	else
 	{
-		appendPQExpBufferStr(creaQry, " LC_CTYPE = ");
-		appendStringLiteralAH(creaQry, ctype, fout);
+		if (strlen(collate) > 0)
+		{
+			appendPQExpBufferStr(creaQry, " LC_COLLATE = ");
+			appendStringLiteralAH(creaQry, collate, fout);
+		}
+		if (strlen(ctype) > 0)
+		{
+			appendPQExpBufferStr(creaQry, " LC_CTYPE = ");
+			appendStringLiteralAH(creaQry, ctype, fout);
+		}
 	}
 
 	/*
@@ -6772,9 +6780,7 @@ getInherits(Archive *fout, int *numInherits)
 
 	/*
 	 * Find all the inheritance information, excluding implicit inheritance
-	 * via partitioning.  We handle that case using getPartitions(), because
-	 * we want more information about partitions than just the parent-child
-	 * relationship.
+	 * via partitioning.
 	 */
 	appendPQExpBufferStr(query, "SELECT inhrelid, inhparent FROM pg_inherits");
 
@@ -17828,7 +17834,7 @@ processExtensionTables(Archive *fout, ExtensionInfo extinfo[],
 	}
 
 	/*
-	 * Now that all the TableInfoData objects have been created for all the
+	 * Now that all the TableDataInfo objects have been created for all the
 	 * extensions, check their FK dependencies and register them to try and
 	 * dump the data out in an order that they can be restored in.
 	 *
@@ -17905,14 +17911,52 @@ getDependencies(Archive *fout)
 	query = createPQExpBuffer();
 
 	/*
+	 * Messy query to collect the dependency data we need.  Note that we
+	 * ignore the sub-object column, so that dependencies of or on a column
+	 * look the same as dependencies of or on a whole table.
+	 *
 	 * PIN dependencies aren't interesting, and EXTENSION dependencies were
 	 * already processed by getExtensionMembership.
 	 */
 	appendPQExpBufferStr(query, "SELECT "
 						 "classid, objid, refclassid, refobjid, deptype "
 						 "FROM pg_depend "
-						 "WHERE deptype != 'p' AND deptype != 'e' "
-						 "ORDER BY 1,2");
+						 "WHERE deptype != 'p' AND deptype != 'e'\n");
+
+	/*
+	 * Since we don't treat pg_amop entries as separate DumpableObjects, we
+	 * have to translate their dependencies into dependencies of their parent
+	 * opfamily.  Ignore internal dependencies though, as those will point to
+	 * their parent opclass, which we needn't consider here (and if we did,
+	 * it'd just result in circular dependencies).  Also, "loose" opfamily
+	 * entries will have dependencies on their parent opfamily, which we
+	 * should drop since they'd likewise become useless self-dependencies.
+	 * (But be sure to keep deps on *other* opfamilies; see amopsortfamily.)
+	 *
+	 * Skip this for pre-8.3 source servers: pg_opfamily doesn't exist there,
+	 * and the (known) cases where it would matter to have these dependencies
+	 * can't arise anyway.
+	 */
+	if (fout->remoteVersion >= 80300)
+	{
+		appendPQExpBufferStr(query, "UNION ALL\n"
+							 "SELECT 'pg_opfamily'::regclass AS classid, amopfamily AS objid, refclassid, refobjid, deptype "
+							 "FROM pg_depend d, pg_amop o "
+							 "WHERE deptype NOT IN ('p', 'e', 'i') AND "
+							 "classid = 'pg_amop'::regclass AND objid = o.oid "
+							 "AND NOT (refclassid = 'pg_opfamily'::regclass AND amopfamily = refobjid)\n");
+
+		/* Likewise for pg_amproc entries */
+		appendPQExpBufferStr(query, "UNION ALL\n"
+							 "SELECT 'pg_opfamily'::regclass AS classid, amprocfamily AS objid, refclassid, refobjid, deptype "
+							 "FROM pg_depend d, pg_amproc p "
+							 "WHERE deptype NOT IN ('p', 'e', 'i') AND "
+							 "classid = 'pg_amproc'::regclass AND objid = p.oid "
+							 "AND NOT (refclassid = 'pg_opfamily'::regclass AND amprocfamily = refobjid)\n");
+	}
+
+	/* Sort the output for efficiency below */
+	appendPQExpBufferStr(query, "ORDER BY 1,2");
 
 	res = ExecuteSqlQuery(fout, query->data, PGRES_TUPLES_OK);
 
