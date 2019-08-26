@@ -1,0 +1,19 @@
+environment:
+  matrix:
+    - MSYSTEM: MINGW32
+    - MSYSTEM: MINGW64
+
+install:
+  - set PATH=C:/msys64/usr/bin;%PATH%
+  - sh -l -c "pacman --noconfirm -S --needed ${MINGW_PACKAGE_PREFIX}-gettext ${MINGW_PACKAGE_PREFIX}-icu ${MINGW_PACKAGE_PREFIX}-libxml2 ${MINGW_PACKAGE_PREFIX}-libxslt ${MINGW_PACKAGE_PREFIX}-openssl"
+
+build_script:
+  - set HOME=.
+  - set PATH=C:/msys64/usr/bin;%PATH%
+  - sh -l -c "./configure --enable-cassert --enable-debug --enable-nls --with-icu --with-ldap --with-libxml --with-libxslt --with-openssl || { cat config.log; exit 1; }"
+  - sh -l -c "make world"
+
+test_script:
+  - set HOME=.
+  - set PATH=C:/msys64/usr/bin;%PATH%
+  - sh -l -c "make check-world || { find . -name regression.diffs | xargs cat; exit 1; }"
