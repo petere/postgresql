@@ -111,6 +111,9 @@ static long long int total_checksum_failures;
 /* Do not verify checksums. */
 static bool noverify_checksums = false;
 
+/* Do not copy config files. */
+static bool exclude_conf = false;
+
 /*
  * The contents of these directories are removed or recreated during server
  * start so they are not included in backups.  The directories themselves are
@@ -638,6 +641,7 @@ parse_basebackup_options(List *options, basebackup_options *opt)
 	bool		o_maxrate = false;
 	bool		o_tablespace_map = false;
 	bool		o_noverify_checksums = false;
+	bool		o_exclude_conf = false;
 
 	MemSet(opt, 0, sizeof(*opt));
 	foreach(lopt, options)
@@ -725,6 +729,15 @@ parse_basebackup_options(List *options, basebackup_options *opt)
 						 errmsg("duplicate option \"%s\"", defel->defname)));
 			noverify_checksums = true;
 			o_noverify_checksums = true;
+		}
+		else if (strcmp(defel->defname, "exclude_conf") == 0)
+		{
+			if (o_exclude_conf)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("duplicate option \"%s\"", defel->defname)));
+			exclude_conf = true;
+			o_exclude_conf = true;
 		}
 		else
 			elog(ERROR, "option \"%s\" not recognized",
@@ -1133,6 +1146,18 @@ sendDir(const char *path, int basepathlen, bool sizeonly, List *tablespaces,
 				 de->d_name);
 
 			continue;
+		}
+
+		if (exclude_conf)
+		{
+			char	   *dot = strrchr(de->d_name, '.');
+			if (dot && strcmp(dot, ".conf") == 0)
+			{
+				elog(DEBUG2,
+					 "configuration file \"%s\" excluded from backup",
+					 de->d_name);
+				continue;
+			}
 		}
 
 		snprintf(pathbuf, sizeof(pathbuf), "%s/%s", path, de->d_name);

@@ -24,9 +24,6 @@ is($node2->safe_psql('postgres', "SELECT count(*) FROM tab_int"),
    qq(1000),
    'check content of standby');
 
-TODO: {
-local $TODO = 'not yet implementated';
 my $new_mtime = (stat($node2->data_dir . '/postgresql.conf'))[9];
 is($new_mtime, $old_mtime,
    'configuration files were not copied');
-};
