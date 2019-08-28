@@ -636,7 +636,7 @@ libpqrcv_base_backup(WalReceiverConn *conn)
 	elog(LOG, "initiating base backup, waiting for remote checkpoint to complete");
 	set_ps_display("waiting for checkpoint", false);
 
-	if (PQsendQuery(conn->streamConn, "BASE_BACKUP PROGRESS EXCLUDE_CONF") == 0)
+	if (PQsendQuery(conn->streamConn, "BASE_BACKUP PROGRESS NOWAIT EXCLUDE_CONF") == 0)
 		ereport(ERROR,
 				(errmsg("could not start base backup on remote server: %s",
 						pchomp(PQerrorMessage(conn->streamConn)))));
