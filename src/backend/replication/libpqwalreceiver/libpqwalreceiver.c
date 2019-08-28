@@ -421,6 +421,7 @@ ReceiveAndUnpackTarFile(PGconn *conn, PGresult *res)
 	int			current_padding = 0;
 	char	   *copybuf = NULL;
 	FILE	   *file = NULL;
+	off_t		flush_offset;
 
 	strlcpy(current_path, DataDir, sizeof(current_path));
 
@@ -513,6 +514,7 @@ ReceiveAndUnpackTarFile(PGconn *conn, PGresult *res)
 						elog(ERROR, "could not set permissions on directory \"%s\": %m",
 							 filename);
 #endif
+					fsync_fname(filename, true);
 				}
 				else if (copybuf[156] == '2')
 				{
@@ -538,6 +540,7 @@ ReceiveAndUnpackTarFile(PGconn *conn, PGresult *res)
 									 filename, mapped_tblspc_path);
 						exit(1);
 					}
+					fsync_fname(filename, false);
 #endif
 				}
 				else
@@ -555,6 +558,8 @@ ReceiveAndUnpackTarFile(PGconn *conn, PGresult *res)
 			if (!file)
 				elog(ERROR, "could not create file \"%s\": %m", filename);
 
+			flush_offset = 0;
+
 #ifndef WIN32
 			if (chmod(filename, (mode_t) filemode))
 				elog(ERROR, "could not set permissions on file \"%s\": %m",
@@ -566,6 +571,7 @@ ReceiveAndUnpackTarFile(PGconn *conn, PGresult *res)
 				/*
 				 * Done with this file, next one will be a new tar header
 				 */
+				pg_fsync(fileno(file));
 				fclose(file);
 				file = NULL;
 				continue;
@@ -582,6 +588,7 @@ ReceiveAndUnpackTarFile(PGconn *conn, PGresult *res)
 				 * Received the padding block for this file, ignore it and
 				 * close the file, then move on to the next tar header.
 				 */
+				pg_fsync(fileno(file));
 				fclose(file);
 				file = NULL;
 				continue;
@@ -589,6 +596,8 @@ ReceiveAndUnpackTarFile(PGconn *conn, PGresult *res)
 
 			if (fwrite(copybuf, r, 1, file) != 1)
 				elog(ERROR, "could not write to file \"%s\": %m", filename);
+			pg_flush_data(fileno(file), flush_offset, r);
+			flush_offset += r;
 			totaldone += r;
 			base_backup_report_progress();
 
@@ -600,6 +609,7 @@ ReceiveAndUnpackTarFile(PGconn *conn, PGresult *res)
 				 * expected. Close the file and move on to the next tar
 				 * header.
 				 */
+				pg_fsync(fileno(file));
 				fclose(file);
 				file = NULL;
 				continue;
