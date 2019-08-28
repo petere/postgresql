@@ -36,6 +36,7 @@
 #include "pgtar.h"
 #include "replication/walreceiver.h"
 #include "utils/builtins.h"
+#include "utils/guc.h"
 #include "utils/memutils.h"
 #include "utils/pg_lsn.h"
 #include "utils/ps_status.h"
@@ -631,12 +632,18 @@ ReceiveAndUnpackTarFile(PGconn *conn, PGresult *res)
 static void
 libpqrcv_base_backup(WalReceiverConn *conn)
 {
+	StringInfoData stmt;
 	PGresult   *res;
 
 	elog(LOG, "initiating base backup, waiting for remote checkpoint to complete");
 	set_ps_display("waiting for checkpoint", false);
 
-	if (PQsendQuery(conn->streamConn, "BASE_BACKUP PROGRESS NOWAIT EXCLUDE_CONF") == 0)
+	initStringInfo(&stmt);
+	appendStringInfo(&stmt, "BASE_BACKUP PROGRESS NOWAIT EXCLUDE_CONF");
+	if (cluster_name && cluster_name[0])
+		appendStringInfo(&stmt, " LABEL %s", quote_literal_cstr(cluster_name));
+
+	if (PQsendQuery(conn->streamConn, stmt.data) == 0)
 		ereport(ERROR,
 				(errmsg("could not start base backup on remote server: %s",
 						pchomp(PQerrorMessage(conn->streamConn)))));
