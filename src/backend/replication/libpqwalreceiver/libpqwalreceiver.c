@@ -20,6 +20,10 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 
+#ifdef USE_SYSTEMD
+#include <systemd/sd-daemon.h>
+#endif
+
 #include "common/string.h"
 #include "libpq-fe.h"
 #include "pqexpbuffer.h"
@@ -34,6 +38,7 @@
 #include "utils/builtins.h"
 #include "utils/memutils.h"
 #include "utils/pg_lsn.h"
+#include "utils/ps_status.h"
 #include "utils/tuplestore.h"
 
 PG_MODULE_MAGIC;
@@ -364,8 +369,51 @@ libpqrcv_server_version(WalReceiverConn *conn)
 /*
  * XXX copied from pg_basebackup.c
  */
+
+unsigned long long totaldone;
+unsigned long long totalsize_kb;
+int tablespacenum;
+int tablespacecount;
+
 static void
-ReceiveAndUnpackTarFile(PGconn *conn, PGresult *res, int rownum)
+base_backup_report_progress(void)
+{
+	int			percent;
+	char	   *progress;
+
+	percent = totalsize_kb ? (int) ((totaldone / 1024) * 100 / totalsize_kb) : 0;
+
+	/*
+	 * Avoid overflowing past 100% or the full size. This may make the total
+	 * size number change as we approach the end of the backup (the estimate
+	 * will always be wrong if WAL is included), but that's better than having
+	 * the done column be bigger than the total.
+	 */
+	if (percent > 100)
+		percent = 100;
+	if (totaldone / 1024 > totalsize_kb)
+		totalsize_kb = totaldone / 1024;
+
+	/* Note: no translation of ps status */
+	progress = psprintf((tablespacecount == 1 ?
+						 "%llu/%llu kB (%d%%), %d/%d tablespace" :
+						 "%llu/%llu kB (%d%%), %d/%d tablespaces"),
+						totaldone / 1024,
+						totalsize_kb,
+						percent,
+						tablespacenum,
+						tablespacecount);
+
+	set_ps_display(progress, false);
+#ifdef USE_SYSTEMD
+	sd_pid_notifyf(PostmasterPid, 0, "STATUS=base backup %s", progress);
+#endif
+
+	pfree(progress);
+}
+
+static void
+ReceiveAndUnpackTarFile(PGconn *conn, PGresult *res)
 {
 	char		current_path[MAXPGPATH];
 	char		filename[MAXPGPATH];
@@ -541,6 +589,8 @@ ReceiveAndUnpackTarFile(PGconn *conn, PGresult *res, int rownum)
 
 			if (fwrite(copybuf, r, 1, file) != 1)
 				elog(ERROR, "could not write to file \"%s\": %m", filename);
+			totaldone += r;
+			base_backup_report_progress();
 
 			current_len_left -= r;
 			if (current_len_left == 0 && current_padding == 0)
@@ -556,6 +606,7 @@ ReceiveAndUnpackTarFile(PGconn *conn, PGresult *res, int rownum)
 			}
 		}						/* continuing data in existing file */
 	}							/* loop over all data blocks */
+	base_backup_report_progress();
 
 	if (file != NULL)
 		elog(ERROR, "COPY stream ended before last file was finished");
@@ -573,8 +624,9 @@ libpqrcv_base_backup(WalReceiverConn *conn)
 	PGresult   *res;
 
 	elog(LOG, "initiating base backup, waiting for remote checkpoint to complete");
+	set_ps_display("waiting for checkpoint", false);
 
-	if (PQsendQuery(conn->streamConn, "BASE_BACKUP EXCLUDE_CONF") == 0)
+	if (PQsendQuery(conn->streamConn, "BASE_BACKUP PROGRESS EXCLUDE_CONF") == 0)
 		ereport(ERROR,
 				(errmsg("could not start base backup on remote server: %s",
 						pchomp(PQerrorMessage(conn->streamConn)))));
@@ -614,13 +666,23 @@ libpqrcv_base_backup(WalReceiverConn *conn)
 				(errmsg("no data returned from server")));
 	}
 
+	totalsize_kb = totaldone = 0;
+	tablespacecount = PQntuples(res);
+	for (int i = 0; i < PQntuples(res); i++)
+	{
+		totalsize_kb += atol(PQgetvalue(res, i, 2));
+	}
+
 	/*
 	 * Start receiving chunks
 	 */
 	for (int i = 0; i < PQntuples(res); i++)
 	{
-		ReceiveAndUnpackTarFile(conn->streamConn, res, i);
+		tablespacenum = i;
+		ReceiveAndUnpackTarFile(conn->streamConn, res);
 	}
+	tablespacenum++;
+	base_backup_report_progress();
 
 	PQclear(res);
 
