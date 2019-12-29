@@ -10,7 +10,7 @@ matrix:
 
 install:
   - set PATH=C:/msys64/usr/bin;%PATH%
-  - sh -l -c "pacman --noconfirm -S --needed ${MINGW_PACKAGE_PREFIX}-gettext ${MINGW_PACKAGE_PREFIX}-icu ${MINGW_PACKAGE_PREFIX}-libxml2 ${MINGW_PACKAGE_PREFIX}-libxslt ${MINGW_PACKAGE_PREFIX}-openssl"
+  - sh -l -c "pacman --noconfirm -S --needed ${MINGW_PACKAGE_PREFIX}-gettext ${MINGW_PACKAGE_PREFIX}-icu ${MINGW_PACKAGE_PREFIX}-libxml2 ${MINGW_PACKAGE_PREFIX}-libxslt ${MINGW_PACKAGE_PREFIX}-openssl ${MINGW_PACKAGE_PREFIX}-readline"
   - sh -l -c "curl -L http://cpanmin.us | perl - --self-upgrade"
   - sh -l -c "cpanm --notest IPC::Run"
 

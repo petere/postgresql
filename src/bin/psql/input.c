@@ -354,7 +354,7 @@ initializeInput(int flags)
 		useReadline = true;
 
 		/* these two things must be done in this order: */
-		initialize_readline();
+		initialize_psql_tab_completion();
 		rl_initialize();
 
 		useHistory = true;

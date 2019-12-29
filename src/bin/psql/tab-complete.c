@@ -38,7 +38,7 @@
 #include "tab-complete.h"
 
 /* If we don't have this, we might as well forget about the whole thing: */
-#ifdef USE_READLINE
+#if defined(USE_READLINE) && !defined(WIN32)
 
 #include <ctype.h>
 
@@ -1124,7 +1124,7 @@ static char *dequote_file_name(char *text, char quote_char);
  * Initialize the readline library for our purposes.
  */
 void
-initialize_readline(void)
+initialize_psql_tab_completion(void)
 {
 	rl_readline_name = (char *) pset.progname;
 	rl_attempted_completion_function = psql_completion;
@@ -4713,4 +4713,12 @@ dequote_file_name(char *text, char quote_char)
 }
 #endif							/* NOT_USED */
 
-#endif							/* USE_READLINE */
+#else							/* !USE_READLINE */
+
+void
+initialize_psql_tab_completion(void)
+{
+	return;
+}
+
+#endif							/* !USE_READLINE */
