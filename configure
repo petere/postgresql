@@ -15848,9 +15848,6 @@ esac
  ;;
 esac
 
-
-$as_echo "#define HAVE_SYMLINK 1" >>confdefs.h
-
   ac_fn_c_check_type "$LINENO" "MINIDUMP_TYPE" "ac_cv_type_MINIDUMP_TYPE" "
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>

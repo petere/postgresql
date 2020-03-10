@@ -372,7 +372,7 @@ sub GenerateFiles
 		HAVE_STRUCT_SOCKADDR_STORAGE___SS_LEN    => undef,
 		HAVE_STRUCT_TM_TM_ZONE                   => undef,
 		HAVE_SYNC_FILE_RANGE                     => undef,
-		HAVE_SYMLINK                             => 1,
+		HAVE_SYMLINK                             => undef,
 		HAVE_SYSLOG                              => undef,
 		HAVE_SYS_EPOLL_H                         => undef,
 		HAVE_SYS_EVENT_H                         => undef,

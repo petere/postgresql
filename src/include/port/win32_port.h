@@ -206,13 +206,8 @@ int			setitimer(int which, const struct itimerval *value, struct itimerval *oval
 #endif
 
 /*
- *	Win32 also doesn't have symlinks, but we can emulate them with
- *	junction points on newer Win32 versions.
- *
- *	Cygwin has its own symlinks which work on Win95/98/ME where
- *	junction points don't, so use those instead.  We have no way of
- *	knowing what type of system Cygwin binaries will be run on.
- *		Note: Some CYGWIN includes might #define WIN32.
+ *	Win32 doesn't have symlinks, but we can emulate them with junction points
+ *	on newer Win32 versions.
  */
 extern int	pgsymlink(const char *oldpath, const char *newpath);
 extern int	pgreadlink(const char *path, char *buf, size_t size);
@@ -220,6 +215,10 @@ extern bool pgwin32_is_junction(const char *path);
 
 #define symlink(oldpath, newpath)	pgsymlink(oldpath, newpath)
 #define readlink(path, buf, size)	pgreadlink(path, buf, size)
+
+/* override configure results */
+#define HAVE_SYMLINK 1
+#define HAVE_READLINK 1
 
 /*
  * Supplement to <sys/types.h>.

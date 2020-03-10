@@ -10504,7 +10504,7 @@ do_pg_start_backup(const char *backupidstr, bool fast, TimeLineID *starttli_p,
 
 			snprintf(fullpath, sizeof(fullpath), "pg_tblspc/%s", de->d_name);
 
-#if defined(HAVE_READLINK) || defined(WIN32)
+#ifdef HAVE_READLINK
 			rllen = readlink(fullpath, linkpath, sizeof(linkpath));
 			if (rllen < 0)
 			{

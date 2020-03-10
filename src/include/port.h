@@ -243,24 +243,6 @@ extern int	pgunlink(const char *path);
 #define unlink(path)			pgunlink(path)
 #endif							/* defined(WIN32) || defined(__CYGWIN__) */
 
-/*
- *	Win32 also doesn't have symlinks, but we can emulate them with
- *	junction points on newer Win32 versions.
- *
- *	Cygwin has its own symlinks which work on Win95/98/ME where
- *	junction points don't, so use those instead.  We have no way of
- *	knowing what type of system Cygwin binaries will be run on.
- *		Note: Some CYGWIN includes might #define WIN32.
- */
-#if defined(WIN32) && !defined(__CYGWIN__)
-extern int	pgsymlink(const char *oldpath, const char *newpath);
-extern int	pgreadlink(const char *path, char *buf, size_t size);
-extern bool pgwin32_is_junction(const char *path);
-
-#define symlink(oldpath, newpath)	pgsymlink(oldpath, newpath)
-#define readlink(path, buf, size)	pgreadlink(path, buf, size)
-#endif
-
 extern bool rmtree(const char *path, bool rmtopdir);
 
 #if defined(WIN32) && !defined(__CYGWIN__)

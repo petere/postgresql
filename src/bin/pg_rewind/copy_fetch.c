@@ -108,7 +108,7 @@ recurse_dir(const char *datadir, const char *parentpath,
 		else if (pgwin32_is_junction(fullpath))
 #endif
 		{
-#if defined(HAVE_READLINK) || defined(WIN32)
+#ifdef HAVE_READLINK
 			char		link_target[MAXPGPATH];
 			int			len;
 

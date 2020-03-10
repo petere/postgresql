@@ -1286,7 +1286,7 @@ sendDir(const char *path, int basepathlen, bool sizeonly, List *tablespaces,
 #endif
 			)
 		{
-#if defined(HAVE_READLINK) || defined(WIN32)
+#ifdef HAVE_READLINK
 			char		linkpath[MAXPGPATH];
 			int			rllen;
 

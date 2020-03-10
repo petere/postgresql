@@ -308,7 +308,7 @@ pg_tablespace_location(PG_FUNCTION_ARGS)
 		tablespaceOid == GLOBALTABLESPACE_OID)
 		PG_RETURN_TEXT_P(cstring_to_text(""));
 
-#if defined(HAVE_READLINK) || defined(WIN32)
+#ifdef HAVE_READLINK
 
 	/*
 	 * Find the location of the tablespace by reading the symbolic link that
