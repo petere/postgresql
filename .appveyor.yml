@@ -1,0 +1,19 @@
+environment:
+  global:
+    PATH: C:/msys64/usr/bin
+  matrix:
+    - MSYSTEM: MSYS
+
+install:
+  - sh -l -c "pacman --noconfirm -S --needed base-devel gcc icu-devel libxml2-devel libxslt-devel openssl-devel zlib-devel"
+
+build_script:
+  - set HOME=.
+  - sh -l -c "./configure --enable-cassert --enable-debug --enable-nls --with-icu --with-libxml --with-libxslt --with-openssl --without-readline"
+  - sh -l -c "make world COPT=-Werror"
+
+test: off
+
+on_failure:
+  - set HOME=.
+  - sh -l -c "test -f config.status || cat config.log"
