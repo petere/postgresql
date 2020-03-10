@@ -1,0 +1,19 @@
+install:
+  - appveyor-retry cinst winflexbison
+  - rename c:\ProgramData\chocolatey\bin\win_flex.exe flex.exe
+  - rename c:\ProgramData\chocolatey\bin\win_bison.exe bison.exe
+  - '"C:\Program Files\Microsoft SDKs\Windows\v7.1\Bin\SetEnv.cmd" /x64'
+  - '"C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\vcvarsall.bat" x86_amd64'
+
+configuration:
+  - Release
+
+before_build:
+  - perl src/tools/msvc/mkvcbuild.pl
+
+build:
+  project: pgsql.sln
+
+test_script:
+  - cd src/tools/msvc && vcregress check
+  - cd src/tools/msvc && vcregress ecpgcheck
