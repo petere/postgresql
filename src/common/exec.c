@@ -227,11 +227,15 @@ find_my_exec(const char *argv0, char *retpath)
  * Note: we are not particularly tense about producing nice error messages
  * because we are not really expecting error here; we just determined that
  * the symlink does point to a valid executable.
+ *
+ * On Windows, we skip all this.  Our readlink() emulation works with junction
+ * points, which are not actually symlinks, so this would all be very
+ * confusing.
  */
 static int
 resolve_symlinks(char *path)
 {
-#ifdef HAVE_READLINK
+#if defined(HAVE_READLINK) && !defined(WIN32)
 	struct stat buf;
 	char		orig_wd[MAXPGPATH],
 				link_buf[MAXPGPATH];
