@@ -1301,6 +1301,7 @@ AC_SUBST(UUID_LIBS)
 AC_HEADER_STDBOOL
 
 AC_CHECK_HEADERS(m4_normalize([
+	afunix.h
 	atomic.h
 	copyfile.h
 	execinfo.h
