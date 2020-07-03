@@ -29,3 +29,4 @@ on_failure:
   - set HOME=.
   - sh -l -c "test -f config.status || cat config.log"
   - sh -l -c "find . -name regression.diffs | xargs cat"
+  - sh -l -c "cat src/bin/pg_basebackup/tmp_check/log/regress_log_010_pg_basebackup"
