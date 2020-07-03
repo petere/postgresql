@@ -775,6 +775,9 @@ make check PROVE_TESTS='t/001_test1.pl t/003_test3.pl'
    <para>
     The TAP tests require the Perl module <literal>IPC::Run</literal>.
     This module is available from CPAN or an operating system package.
+    On Windows, <literal>Win32API::File</literal> is additionally
+    required, and <literal>Win32::Symlink</literal> is optional to be
+    able to run tests related to symlinks.
    </para>
 
    <para>

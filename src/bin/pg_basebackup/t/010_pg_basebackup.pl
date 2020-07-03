@@ -211,11 +211,11 @@ $node->command_fails(
 	'pg_basebackup tar with long name fails');
 unlink "$pgdata/$superlongname";
 
-# The following tests test symlinks. Windows doesn't have symlinks, so
-# skip on Windows.
+# The following tests are for symlinks.
 SKIP:
 {
-	skip "symlinks not supported on Windows", 18 if ($windows_os);
+	skip "symlinks not supported with this perl installation", 18
+	  if (!$symlink_support);
 
 	# Move pg_replslot out of $pgdata and create a symlink to it.
 	$node->stop;
@@ -238,11 +238,12 @@ SKIP:
 	# for the tablespace directories, which hopefully won't run afoul of
 	# the 99 character length limit.
 	my $shorter_tempdir = TestLib::tempdir_short . "/tempdir";
+	my $realTsDir       = TestLib::perl2host("$shorter_tempdir/tblspc1");
 	symlink "$tempdir", $shorter_tempdir;
 
 	mkdir "$tempdir/tblspc1";
 	$node->safe_psql('postgres',
-		"CREATE TABLESPACE tblspc1 LOCATION '$shorter_tempdir/tblspc1';");
+		"CREATE TABLESPACE tblspc1 LOCATION '$realTsDir';");
 	$node->safe_psql('postgres',
 		"CREATE TABLE test1 (a int) TABLESPACE tblspc1;");
 	$node->command_ok([ 'pg_basebackup', '-D', "$tempdir/tarbackup2", '-Ft' ],
@@ -292,18 +293,33 @@ SKIP:
 		],
 		'plain format with tablespaces succeeds with tablespace mapping');
 	ok(-d "$tempdir/tbackup/tblspc1", 'tablespace was relocated');
-	opendir(my $dh, "$pgdata/pg_tblspc") or die;
-	ok( (   grep {
-				-l "$tempdir/backup1/pg_tblspc/$_"
-				  and readlink "$tempdir/backup1/pg_tblspc/$_" eq
-				  "$tempdir/tbackup/tblspc1"
-			} readdir($dh)),
-		"tablespace symlink was updated");
-	closedir $dh;
+
+	# This symlink check is not supported on Windows.  Win32::Symlink works
+	# around this situation by using junction points (actually PostgreSQL
+	# approach on the problem), and -l is not able to detect that situation.
+  SKIP:
+	{
+		skip "symlink check not implemented on Windows", 1
+		  if ($windows_os);
+		opendir(my $dh, "$pgdata/pg_tblspc") or die;
+		ok( (   grep {
+					-l "$tempdir/backup1/pg_tblspc/$_"
+					  and readlink "$tempdir/backup1/pg_tblspc/$_" eq
+					  "$tempdir/tbackup/tblspc1"
+				} readdir($dh)),
+			"tablespace symlink was updated");
+		closedir $dh;
+	}
 
 	# Group access should be enabled on all backup files
-	ok(check_mode_recursive("$tempdir/backup1", 0750, 0640),
-		"check backup dir permissions");
+  SKIP:
+	{
+		skip "unix-style permissions not supported on Windows", 1
+		  if ($windows_os);
+
+		ok(check_mode_recursive("$tempdir/backup1", 0750, 0640),
+			"check backup dir permissions");
+	}
 
 	# Unlogged relation forks other than init should not be copied
 	my ($tblspc1UnloggedBackupPath) =

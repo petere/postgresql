@@ -22,6 +22,7 @@ TestLib - helper module for writing PostgreSQL's C<prove> tests.
 
   # Miscellanea
   print "on Windows" if $TestLib::windows_os;
+  print "supports symlinks" if $TestLib::symlink_support;
   my $path = TestLib::perl2host($backup_dir);
   ok(check_mode_recursive($stream_dir, 0700, 0600),
     "check stream dir permissions");
@@ -84,10 +85,13 @@ our @EXPORT = qw(
   command_checks_all
 
   $windows_os
+  $symlink_support
+  $is_msys2
   $use_unix_sockets
 );
 
-our ($windows_os, $use_unix_sockets, $tmp_check, $log_path, $test_logfile);
+our ($windows_os, $is_msys2, $symlink_support, $use_unix_sockets, $tmp_check,
+	$log_path, $test_logfile);
 
 BEGIN
 {
@@ -120,6 +124,32 @@ BEGIN
 		Win32API::File->import(qw(createFile OsFHandleOpen CloseHandle));
 	}
 
+	# Check if this environment is MSYS2.
+	$is_msys2 = $^O eq 'msys' && `uname -or` =~ /^[2-9].*Msys/;
+
+	# Check if this installation of perl running the tests has support
+	# for symlinks.  Some installations of perl on Windows may provide
+	# an equivalent implementation based on junction points thanks to
+	# Win32::Symlink.  Non-Windows platforms and MSYS2 are able to
+	# support this case.
+	if ($windows_os && !$is_msys2)
+	{
+		eval { require Win32::Symlink; };
+		if ($@)
+		{
+			$symlink_support = 0;
+		}
+		else
+		{
+			$symlink_support = 1;
+			Win32::Symlink->import(qw(readlink symlink));
+		}
+	}
+	else
+	{
+		$symlink_support = 1;
+	}
+
 	# Specifies whether to use Unix sockets for test setups.  On
 	# Windows we don't use them by default since it's not universally
 	# supported, but it can be overridden if desired.
@@ -132,6 +162,14 @@ BEGIN
 =head1 EXPORTED VARIABLES
 
 =over
+
+=item C<$is_msys2>
+
+Set to true when running under MSYS2.
+
+=item C<$symlink_support>
+
+Set to true when running with an installation of perl that supports symlinks.
 
 =item C<$windows_os>
 

@@ -7,9 +7,9 @@ use File::Copy;
 use File::Path qw(rmtree);
 use TestLib;
 use Test::More;
-if ($windows_os)
+if (!$symlink_support)
 {
-	plan skip_all => 'symlinks not supported on Windows';
+	plan skip_all => 'symlinks not supported with this perl installation';
 	exit;
 }
 else
