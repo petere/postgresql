@@ -238,6 +238,7 @@ SKIP:
 	# for the tablespace directories, which hopefully won't run afoul of
 	# the 99 character length limit.
 	my $shorter_tempdir = TestLib::tempdir_short . "/tempdir";
+	mkdir $shorter_tempdir;
 	my $realTsDir       = TestLib::perl2host("$shorter_tempdir/tblspc1");
 	symlink "$tempdir", $shorter_tempdir;
 
