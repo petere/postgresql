@@ -630,7 +630,7 @@ sub check_pg_config
 
 =item dir_symlink(oldname, newname)
 
-Portably create a symlink for a director. On Windows this creates a junction.
+Portably create a symlink for a directory. On Windows this creates a junction.
 Elsewhere it just calls perl's builtin symlink.
 
 =cut
