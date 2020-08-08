@@ -535,8 +535,6 @@ typedef unsigned short mode_t;
  * clear. However, using our wrapper (and the misrounded-input variant file,
  * already required for supporting ancient systems) can't make things any
  * worse, except for a tiny performance loss when reading zeros.
- *
- * See also cygwin.h for another instance of this.
  */
 #define HAVE_BUGGY_STRTOF 1
 #endif
