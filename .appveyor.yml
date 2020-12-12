@@ -20,7 +20,7 @@ build_script:
   - set HOME=.
   - set PATH=C:/msys64/usr/bin;%PATH%
   - sh -l -c "./configure --enable-cassert --enable-debug --enable-nls --enable-tap-tests --with-icu --with-ldap --with-libxml --with-libxslt --with-openssl"
-  - sh -l -c "make world COPT=-Werror"
+  - sh -l -c "make world"
 
 test_script:
   - set HOME=.
