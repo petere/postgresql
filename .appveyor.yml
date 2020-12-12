@@ -1,0 +1,33 @@
+image: Visual Studio 2019
+
+environment:
+  matrix:
+    - MSYSTEM: MINGW32
+    - MSYSTEM: MINGW64
+
+# https://www.postgresql.org/message-id/flat/f1caef93-9640-022e-9211-bbe8755a56b0%402ndQuadrant.com
+matrix:
+  allow_failures:
+    - MSYSTEM: MINGW64
+
+install:
+  - set PATH=C:/msys64/usr/bin;%PATH%
+  - sh -l -c "pacman --noconfirm -S --needed ${MINGW_PACKAGE_PREFIX}-gettext ${MINGW_PACKAGE_PREFIX}-icu ${MINGW_PACKAGE_PREFIX}-libxml2 ${MINGW_PACKAGE_PREFIX}-libxslt ${MINGW_PACKAGE_PREFIX}-openssl"
+  - sh -l -c "curl -L http://cpanmin.us | perl - --self-upgrade"
+  - sh -l -c "cpanm --notest IPC::Run"
+
+build_script:
+  - set HOME=.
+  - set PATH=C:/msys64/usr/bin;%PATH%
+  - sh -l -c "./configure --enable-cassert --enable-debug --enable-nls --enable-tap-tests --with-icu --with-ldap --with-libxml --with-libxslt --with-openssl"
+  - sh -l -c "make world COPT=-Werror"
+
+test_script:
+  - set HOME=.
+  - set PATH=C:/msys64/usr/bin;%PATH%
+  - sh -l -c "make check-world COPT=-Werror PROVE_FLAGS=--verbose"
+
+on_failure:
+  - set HOME=.
+  - sh -l -c "test -f config.status || cat config.log"
+  - sh -l -c "find . -name regression.diffs | xargs cat"
