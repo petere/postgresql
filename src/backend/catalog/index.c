@@ -117,6 +117,7 @@ static void UpdateIndexRelation(Oid indexoid, Oid heapoid,
 								Oid *classOids,
 								int16 *coloptions,
 								bool primary,
+								bool nulls_not_distinct,
 								bool isexclusion,
 								bool immediate,
 								bool isvalid,
@@ -527,6 +528,7 @@ UpdateIndexRelation(Oid indexoid,
 					Oid *classOids,
 					int16 *coloptions,
 					bool primary,
+					bool nulls_not_distinct,
 					bool isexclusion,
 					bool immediate,
 					bool isvalid,
@@ -600,6 +602,7 @@ UpdateIndexRelation(Oid indexoid,
 	values[Anum_pg_index_indnatts - 1] = Int16GetDatum(indexInfo->ii_NumIndexAttrs);
 	values[Anum_pg_index_indnkeyatts - 1] = Int16GetDatum(indexInfo->ii_NumIndexKeyAttrs);
 	values[Anum_pg_index_indisunique - 1] = BoolGetDatum(indexInfo->ii_Unique);
+	values[Anum_pg_index_indnullsnotdistinct - 1] = BoolGetDatum(nulls_not_distinct);
 	values[Anum_pg_index_indisprimary - 1] = BoolGetDatum(primary);
 	values[Anum_pg_index_indisexclusion - 1] = BoolGetDatum(isexclusion);
 	values[Anum_pg_index_indimmediate - 1] = BoolGetDatum(immediate);
@@ -660,6 +663,8 @@ UpdateIndexRelation(Oid indexoid,
  * flags: bitmask that can include any combination of these bits:
  *		INDEX_CREATE_IS_PRIMARY
  *			the index is a primary key
+ *		INDEX_CREATE_NULLS_NOT_DISTINCT
+ *			set null treatment to nulls not distinct
  *		INDEX_CREATE_ADD_CONSTRAINT:
  *			invoke index_constraint_create also
  *		INDEX_CREATE_SKIP_BUILD:
@@ -714,6 +719,7 @@ index_create(Relation heapRelation,
 	int			i;
 	char		relpersistence;
 	bool		isprimary = (flags & INDEX_CREATE_IS_PRIMARY) != 0;
+	bool		nulls_not_distinct = (flags & INDEX_CREATE_NULLS_NOT_DISTINCT) != 0;
 	bool		invalid = (flags & INDEX_CREATE_INVALID) != 0;
 	bool		concurrent = (flags & INDEX_CREATE_CONCURRENT) != 0;
 	bool		partitioned = (flags & INDEX_CREATE_PARTITIONED) != 0;
@@ -985,7 +991,7 @@ index_create(Relation heapRelation,
 	UpdateIndexRelation(indexRelationId, heapRelationId, parentIndexRelid,
 						indexInfo,
 						collationObjectId, classObjectId, coloptions,
-						isprimary, is_exclusion,
+						isprimary, nulls_not_distinct, is_exclusion,
 						(constr_flags & INDEX_CONSTR_CREATE_DEFERRABLE) == 0,
 						!concurrent && !invalid,
 						!concurrent);

@@ -1107,6 +1107,8 @@ DefineIndex(Oid relationId,
 		flags |= INDEX_CREATE_PARTITIONED;
 	if (stmt->primary)
 		flags |= INDEX_CREATE_IS_PRIMARY;
+	if (stmt->nulls_not_distinct)
+		flags |= INDEX_CREATE_NULLS_NOT_DISTINCT;
 
 	/*
 	 * If the table is partitioned, and recursion was declined but partitions
