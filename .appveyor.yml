@@ -1,0 +1,39 @@
+environment:
+  global:
+    CYG_MIRROR: http://cygwin.mirror.rafal.ca/
+    CYG_CACHE: C:/cygwin/var/cache/setup
+  matrix:
+    - CYG_ARCH: x86_64
+      CYG_ROOT: C:/cygwin64
+    - CYG_ARCH: x86
+      CYG_ROOT: C:/cygwin
+
+# 32-bit Cygwin seems buggy
+matrix:
+  allow_failures:
+    - CYG_ARCH: x86
+      CYG_ROOT: C:/cygwin
+
+install:
+  - set PATH=%CYG_ROOT%/bin;%PATH%
+  - 'appveyor DownloadFile http://cygwin.com/setup-%CYG_ARCH%.exe -FileName setup.exe'
+  - 'setup.exe -qnNdO -R "%CYG_ROOT%" -s "%CYG_MIRROR%" -l "%CYG_CACHE%" -P flex -P libreadline-devel -P libssl-devel -P libxml2-devel -P libxslt-devel -P openldap-devel -P zlib-devel'
+  - sh -l -c "cygserver-config --yes"
+  - sh -l -c "cygrunsrv -S cygserver"
+
+build_script:
+  - set HOME=.
+  - set PATH=%CYG_ROOT%/bin;%PATH%
+  - sh -l -c "./configure --enable-cassert --enable-debug --enable-nls --with-ldap --with-libxml --with-libxslt --with-openssl"
+  - sh -l -c "make world COPT=-Werror"
+
+test_script:
+  - set HOME=.
+  - set PATH=%CYG_ROOT%/bin;%PATH%
+  - sh -l -c "make check-world COPT=-Werror PG_TEST_EXTRA='ssl'"
+
+on_failure:
+  - set HOME=.
+  - sh -l -c "test -f config.status || cat config.log"
+  - sh -l -c "find . -name regression.diffs | xargs cat"
+  - sh -l -c "cat src/test/regress/log/postmaster.log"
