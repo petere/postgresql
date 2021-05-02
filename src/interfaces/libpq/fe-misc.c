@@ -31,13 +31,13 @@
 #include "postgres_fe.h"
 
 #include <signal.h>
+#include <sys/types.h>
 #include <time.h>
 
 #ifdef WIN32
 #include "win32.h"
 #else
 #include <unistd.h>
-#include <sys/time.h>
 #endif
 
 #ifdef HAVE_POLL_H

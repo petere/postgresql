@@ -23,10 +23,7 @@
 /* We assume libpq-fe.h has already been included. */
 #include "libpq-events.h"
 
-#include <time.h>
-#ifndef WIN32
-#include <sys/time.h>
-#endif
+#include <sys/types.h>
 
 #ifdef ENABLE_THREAD_SAFETY
 #ifdef WIN32
