@@ -31,6 +31,7 @@
 #include "postgres_fe.h"
 
 #include <signal.h>
+#include <sys/types.h>
 #include <time.h>
 
 #ifdef WIN32
@@ -38,7 +39,6 @@
 #else
 #include <unistd.h>
 #include <sys/select.h>
-#include <sys/time.h>
 #endif
 
 #ifdef HAVE_POLL_H

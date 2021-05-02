@@ -25,10 +25,7 @@
 
 #include <netdb.h>
 #include <sys/socket.h>
-#include <time.h>
-#ifndef WIN32
-#include <sys/time.h>
-#endif
+#include <sys/types.h>
 
 #ifdef ENABLE_THREAD_SAFETY
 #ifdef WIN32
