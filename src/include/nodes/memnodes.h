@@ -75,7 +75,7 @@ typedef struct MemoryContextMethods
 } MemoryContextMethods;
 
 
-typedef struct MemoryContextData
+typedef struct ABSTRACT_NODE(MemoryContextData)
 {
 	NodeTag		type;			/* identifies exact kind of context */
 	/* these two fields are placed here to minimize alignment wastage: */

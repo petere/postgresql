@@ -1570,7 +1570,7 @@ typedef struct GatherMergePath
  * All join-type paths share these fields.
  */
 
-typedef struct JoinPath
+typedef struct ABSTRACT_NODE(JoinPath)
 {
 	Path		path;
 
@@ -1595,7 +1595,10 @@ typedef struct JoinPath
  * A nested-loop path needs no special fields.
  */
 
-typedef JoinPath NestPath;
+typedef struct NestPath
+{
+	JoinPath	jpath;
+} NestPath;
 
 /*
  * A mergejoin path has these fields.

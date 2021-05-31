@@ -1209,7 +1209,7 @@ typedef struct PartitionedRelPruneInfo
  *
  * step_id is the global identifier of the step within its pruning context.
  */
-typedef struct PartitionPruneStep
+typedef struct ABSTRACT_NODE(PartitionPruneStep)
 {
 	NodeTag		type;
 	int			step_id;
