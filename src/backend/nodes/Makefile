@@ -14,7 +14,7 @@ include $(top_builddir)/src/Makefile.global
 
 OBJS = \
 	bitmapset.o \
-	copyfuncs.o \
+	copyfuncs2.o \
 	equalfuncs.o \
 	extensible.o \
 	list.o \
@@ -32,6 +32,7 @@ OBJS = \
 include $(top_srcdir)/src/backend/common.mk
 
 nodefiles = \
+	nodes/nodes.h \
 	nodes/execnodes.h \
 	nodes/plannodes.h \
 	nodes/primnodes.h \
@@ -51,7 +52,9 @@ nodefiles = \
 	access/tsmapi.h \
 	utils/rel.h \
 	nodes/supportnodes.h \
-	executor/tuptable.h
+	executor/tuptable.h \
+	nodes/lockoptions.h \
+	access/sdir.h
 
 node-stuff:
 	$(PERL) gen_node_stuff.pl $(addprefix ../../include/,$(nodefiles)) ../utils/mmgr/aset.c ../utils/mmgr/generation.c ../utils/mmgr/slab.c ../executor/nodeWindowAgg.c
