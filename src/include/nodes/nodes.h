@@ -532,6 +532,9 @@ typedef enum NodeTag
 } NodeTag;
 #endif
 
+#define NODE_EQUAL_IGNORE()
+#define NODE_EQUAL_IGNORE_IF_ZERO()
+
 /*
  * The first field of a node of any type is guaranteed to be the NodeTag.
  * Hence the type of any node can be gotten by casting it to Node. Declaring

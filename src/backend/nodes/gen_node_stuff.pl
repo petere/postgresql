@@ -23,6 +23,7 @@ my $supertype;
 my $supertype_field;
 my @my_fields;
 my %my_field_types;
+my %my_field_attrs;
 
 my %all_node_types;
 
@@ -93,6 +94,7 @@ while (my $line = <$ifh>)
 				push @node_types, $in_struct;
 				my @f = @my_fields;
 				my %ft = %my_field_types;
+				my %fa = %my_field_attrs;
 				if ($supertype)
 				{
 					my @superfields;
@@ -107,6 +109,7 @@ while (my $line = <$ifh>)
 				#warn "$in_struct has no fields\n" unless scalar(@f);
 				$all_node_types{$in_struct}->{fields} = \@f;
 				$all_node_types{$in_struct}->{field_types} = \%ft;
+				$all_node_types{$in_struct}->{field_attrs} = \%fa;
 
 				if (basename($infile) eq 'execnodes.h' ||
 					basename($infile) eq 'trigger.h' ||
@@ -128,18 +131,20 @@ while (my $line = <$ifh>)
 			$in_struct = undef;
 			@my_fields = ();
 			%my_field_types = ();
+			%my_field_attrs = ();
 		}
 		elsif ($line =~ /^\};$/ && !$is_node_struct)
 		{
 			$in_struct = undef;
 		}
-		elsif ($line =~ /^\s*(.+)\s*\b(\w+)(\[\w+\])?;/)
+		elsif ($line =~ /^\s*(.+)\s*\b(\w+)(\[\w+\])?\s*(NODE_EQUAL_IGNORE\w*\(\))?;/)
 		{
 			if ($is_node_struct)
 			{
 				my $type = $1;
 				my $name = $2;
 				my $array_size = $3;
+				my $attr = $4;
 
 				$type =~ s/^const\s*//;
 				$type =~ s/\s*$//;
@@ -148,6 +153,7 @@ while (my $line = <$ifh>)
 				$type = $type . $array_size if $array_size;
 				push @my_fields, $name;
 				$my_field_types{$name} = $type;
+				$my_field_attrs{$name} = $attr;
 			}
 		}
 		else
@@ -173,8 +179,10 @@ while (my $line = <$ifh>)
 			push @node_types, $n;
 			my @f = @{$all_node_types{$alias_of}->{fields}};
 			my %ft = %{$all_node_types{$alias_of}->{field_types}};
+			my %fa = %{$all_node_types{$alias_of}->{field_attrs}};
 			$all_node_types{$n}->{fields} = \@f;
 			$all_node_types{$n}->{field_types} = \%ft;
+			$all_node_types{$n}->{field_attrs} = \%fa;
 		}
 		elsif ($line =~ /^typedef enum (\w+)(\s*\/\*.*)?$/)
 		{
@@ -226,9 +234,10 @@ print $nt "} NodeTag;\n";
 close $nt;
 
 
-# copyfuncs.c
+# copyfuncs.c, equalfuncs.c
 
 open my $cf, '>', 'copyfuncs.inc.c' or die;
+open my $ef, '>', 'equalfuncs.inc.c' or die;
 
 foreach my $n (@node_types)
 {
@@ -244,32 +253,54 @@ _copy${n}(const $n *from)
 
 ";
 
+	print $ef "
+static bool
+_equal${n}(const $n *a, const $n *b)
+{
+";
+
 	{
 		my $last_array_size_field;
 
 		foreach my $f (@{$all_node_types{$n}->{fields}})
 		{
 			my $t = $all_node_types{$n}->{field_types}{$f};
+			my $a = $all_node_types{$n}->{field_attrs}{$f};
+			my $equal_ignore = (defined($a) && $a eq 'NODE_EQUAL_IGNORE()');
 			if ($t eq 'char*')
 			{
 				print $cf "\tCOPY_STRING_FIELD($f);\n";
+				print $ef "\tCOMPARE_STRING_FIELD($f);\n" unless $equal_ignore;
 			}
 			elsif ($t eq 'Bitmapset*' || $t eq 'Relids')
 			{
 				print $cf "\tCOPY_BITMAPSET_FIELD($f);\n";
+				print $ef "\tCOMPARE_BITMAPSET_FIELD($f);\n" unless $equal_ignore;
 			}
 			elsif ($t eq 'int' && $f =~ 'location$')
 			{
 				print $cf "\tCOPY_LOCATION_FIELD($f);\n";
+				print $ef "\tCOMPARE_LOCATION_FIELD($f);\n" unless $equal_ignore;
 			}
 			elsif (grep {$_ eq $t} @scalar_types)
 			{
 				print $cf "\tCOPY_SCALAR_FIELD($f);\n";
+				if (defined($a) && $a eq 'NODE_EQUAL_IGNORE_IF_ZERO()')
+				{
+					print $ef "\tif (a->$f != b->$f && a->$f != 0 && b->$f != 0)\n\t\treturn false;\n";
+				}
+				else
+				{
+					print $ef "\tCOMPARE_SCALAR_FIELD($f);\n" unless $equal_ignore || $t eq 'CoercionForm';
+				}
 				$last_array_size_field = "from->$f";
 			}
 			elsif ($t =~ /(\w+)\*/ && $1 ~~ @scalar_types)
 			{
-				print $cf "\tCOPY_POINTER_FIELD($f, $last_array_size_field * sizeof($1));\n";
+				my $tt = $1;
+				print $cf "\tCOPY_POINTER_FIELD($f, $last_array_size_field * sizeof($tt));\n";
+				(my $l2 = $last_array_size_field) =~ s/from/a/;
+				print $ef "\tCOMPARE_POINTER_FIELD($f, $l2 * sizeof($tt));\n" unless $equal_ignore;
 			}
 			elsif ($t eq 'Datum' && $f eq 'constvalue') {
 				print $cf q?
@@ -292,6 +323,16 @@ _copy${n}(const $n *from)
 	}
 
 ?;
+				print $ef q{
+	/*
+	 * We treat all NULL constants of the same type as equal. Someday this
+	 * might need to change?  But datumIsEqual doesn't work on nulls, so...
+	 */
+	if (!a->constisnull && !b->constisnull &&
+		!datumIsEqual(a->constvalue, b->constvalue,
+					  a->constbyval, a->constlen))
+		return false;
+};
 			}
 			elsif ($f =~ /_cache/)
 			{
@@ -302,22 +343,29 @@ _copy${n}(const $n *from)
 			elsif ($t =~ /(\w+)\*/ && ($1 ~~ @node_types || $1 eq 'Node' || $1 eq 'Expr'))
 			{
 				print $cf "\tCOPY_NODE_FIELD($f);\n";
+				print $ef "\tCOMPARE_NODE_FIELD($f);\n" unless $equal_ignore;
 				$last_array_size_field = "list_length(from->$f)" if $t eq 'List*';
 			}
 			elsif ($t =~ /\w+\[/)
 			{
 				# COPY_SCALAR_FIELD might work for these, but let's not assume that
 				print $cf "\tmemcpy(newnode->$f, from->$f, sizeof(newnode->$f));\n";
+				print $ef "\tCOMPARE_POINTER_FIELD($f, sizeof(a->$f));\n" unless $equal_ignore;
 			}
 			else
 			{
 				print $cf "\tabort();\t/* TODO: ($t) $f */\n";
+				print $ef "\tabort();\t/* TODO: ($t) $f */\n" unless $equal_ignore;
 			}
 		}
 	}
 
 	print $cf "
 \treturn newnode;
+}
+";
+	print $ef "
+\treturn true;
 }
 ";
 }
@@ -338,6 +386,34 @@ copyObjectImpl(const void *from)
 \t{
 ";
 
+print $ef "
+bool
+equal(const void *a, const void *b)
+{
+	bool		retval;
+
+	if (a == b)
+		return true;
+
+	/*
+	 * note that a!=b, so only one of them can be NULL
+	 */
+	if (a == NULL || b == NULL)
+		return false;
+
+	/*
+	 * are they the same type of nodes?
+	 */
+	if (nodeTag(a) != nodeTag(b))
+		return false;
+
+	/* Guard against stack overflow due to overly complex expressions */
+	check_stack_depth();
+
+	switch (nodeTag(a))
+	{
+";
+
 foreach my $n (@node_types)
 {
 	next if $n ~~ @abstract;
@@ -347,6 +423,11 @@ foreach my $n (@node_types)
 	print $cf "
 \t\tcase T_${n}:
 \t\t\tretval = _copy${n}(from);
+\t\t\tbreak;";
+
+	print $ef "
+\t\tcase T_${n}:
+\t\t\tretval = _equal${n}(a, b);
 \t\t\tbreak;";
 }
 
@@ -359,6 +440,15 @@ print $cf "
 \t\t\tretval = _copyValue(from);
 \t\t\tbreak;";
 
+print $ef "
+\t\tcase T_Integer:
+\t\tcase T_Float:
+\t\tcase T_String:
+\t\tcase T_BitString:
+\t\tcase T_Null:
+\t\t\tretval = _equalValue(a, b);
+\t\t\tbreak;";
+
 print $cf "
 \t\tcase T_List:
 \t\t\tretval = list_copy_deep(from);
@@ -366,6 +456,13 @@ print $cf "
 \t\tcase T_IntList:
 \t\tcase T_OidList:
 \t\t\tretval = list_copy(from);
+\t\t\tbreak;";
+
+print $ef "
+\t\tcase T_List:
+\t\tcase T_IntList:
+\t\tcase T_OidList:
+\t\t\tretval = _equalList(a, b);
 \t\t\tbreak;";
 
 print $cf "
@@ -379,4 +476,17 @@ print $cf "
 }
 ";
 
+print $ef "
+		default:
+			elog(ERROR, \"unrecognized node type: %d\",
+				 (int) nodeTag(a));
+			retval = false;		/* keep compiler quiet */
+			break;
+	}
+
+	return retval;
+}
+";
+
 close $cf;
+close $ef;

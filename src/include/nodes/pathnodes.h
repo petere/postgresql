@@ -2051,19 +2051,19 @@ typedef struct RestrictInfo
 
 	bool		outerjoin_delayed;	/* true if delayed by lower outer join */
 
-	bool		can_join;		/* see comment above */
+	bool		can_join NODE_EQUAL_IGNORE();		/* see comment above */
 
-	bool		pseudoconstant; /* see comment above */
+	bool		pseudoconstant NODE_EQUAL_IGNORE(); /* see comment above */
 
-	bool		leakproof;		/* true if known to contain no leaked Vars */
+	bool		leakproof NODE_EQUAL_IGNORE();		/* true if known to contain no leaked Vars */
 
-	VolatileFunctionStatus has_volatile;	/* to indicate if clause contains
+	VolatileFunctionStatus has_volatile NODE_EQUAL_IGNORE();	/* to indicate if clause contains
 											 * any volatile functions. */
 
 	Index		security_level; /* see comment above */
 
 	/* The set of relids (varnos) actually referenced in the clause: */
-	Relids		clause_relids;
+	Relids		clause_relids NODE_EQUAL_IGNORE();
 
 	/* The set of relids required to evaluate the clause: */
 	Relids		required_relids;
@@ -2075,47 +2075,47 @@ typedef struct RestrictInfo
 	Relids		nullable_relids;
 
 	/* These fields are set for any binary opclause: */
-	Relids		left_relids;	/* relids in left side of clause */
-	Relids		right_relids;	/* relids in right side of clause */
+	Relids		left_relids NODE_EQUAL_IGNORE();	/* relids in left side of clause */
+	Relids		right_relids NODE_EQUAL_IGNORE();	/* relids in right side of clause */
 
 	/* This field is NULL unless clause is an OR clause: */
-	Expr	   *orclause;		/* modified clause with RestrictInfos */
+	Expr	   *orclause NODE_EQUAL_IGNORE();		/* modified clause with RestrictInfos */
 
 	/* This field is NULL unless clause is potentially redundant: */
-	EquivalenceClass *parent_ec;	/* generating EquivalenceClass */
+	EquivalenceClass *parent_ec NODE_EQUAL_IGNORE();	/* generating EquivalenceClass */
 
 	/* cache space for cost and selectivity */
-	QualCost	eval_cost;		/* eval cost of clause; -1 if not yet set */
-	Selectivity norm_selec;		/* selectivity for "normal" (JOIN_INNER)
+	QualCost	eval_cost NODE_EQUAL_IGNORE();		/* eval cost of clause; -1 if not yet set */
+	Selectivity norm_selec NODE_EQUAL_IGNORE();		/* selectivity for "normal" (JOIN_INNER)
 								 * semantics; -1 if not yet set; >1 means a
 								 * redundant clause */
-	Selectivity outer_selec;	/* selectivity for outer join semantics; -1 if
+	Selectivity outer_selec NODE_EQUAL_IGNORE();	/* selectivity for outer join semantics; -1 if
 								 * not yet set */
 
 	/* valid if clause is mergejoinable, else NIL */
-	List	   *mergeopfamilies;	/* opfamilies containing clause operator */
+	List	   *mergeopfamilies NODE_EQUAL_IGNORE();	/* opfamilies containing clause operator */
 
 	/* cache space for mergeclause processing; NULL if not yet set */
-	EquivalenceClass *left_ec;	/* EquivalenceClass containing lefthand */
-	EquivalenceClass *right_ec; /* EquivalenceClass containing righthand */
-	EquivalenceMember *left_em; /* EquivalenceMember for lefthand */
-	EquivalenceMember *right_em;	/* EquivalenceMember for righthand */
-	List	   *scansel_cache;	/* list of MergeScanSelCache structs */
+	EquivalenceClass *left_ec NODE_EQUAL_IGNORE();	/* EquivalenceClass containing lefthand */
+	EquivalenceClass *right_ec NODE_EQUAL_IGNORE(); /* EquivalenceClass containing righthand */
+	EquivalenceMember *left_em NODE_EQUAL_IGNORE(); /* EquivalenceMember for lefthand */
+	EquivalenceMember *right_em NODE_EQUAL_IGNORE();	/* EquivalenceMember for righthand */
+	List	   *scansel_cache NODE_EQUAL_IGNORE();	/* list of MergeScanSelCache structs */
 
 	/* transient workspace for use while considering a specific join path */
-	bool		outer_is_left;	/* T = outer var on left, F = on right */
+	bool		outer_is_left NODE_EQUAL_IGNORE();	/* T = outer var on left, F = on right */
 
 	/* valid if clause is hashjoinable, else InvalidOid: */
-	Oid			hashjoinoperator;	/* copy of clause operator */
+	Oid			hashjoinoperator NODE_EQUAL_IGNORE();	/* copy of clause operator */
 
 	/* cache space for hashclause processing; -1 if not yet set */
-	Selectivity left_bucketsize;	/* avg bucketsize of left side */
-	Selectivity right_bucketsize;	/* avg bucketsize of right side */
-	Selectivity left_mcvfreq;	/* left side's most common val's freq */
-	Selectivity right_mcvfreq;	/* right side's most common val's freq */
+	Selectivity left_bucketsize NODE_EQUAL_IGNORE();	/* avg bucketsize of left side */
+	Selectivity right_bucketsize NODE_EQUAL_IGNORE();	/* avg bucketsize of right side */
+	Selectivity left_mcvfreq NODE_EQUAL_IGNORE();	/* left side's most common val's freq */
+	Selectivity right_mcvfreq NODE_EQUAL_IGNORE();	/* right side's most common val's freq */
 
 	/* hash equality operator used for result cache, else InvalidOid */
-	Oid			hasheqoperator;
+	Oid			hasheqoperator NODE_EQUAL_IGNORE();
 } RestrictInfo;
 
 /*
@@ -2170,8 +2170,8 @@ typedef struct MergeScanSelCache
 typedef struct PlaceHolderVar
 {
 	Expr		xpr;
-	Expr	   *phexpr;			/* the represented expression */
-	Relids		phrels;			/* base relids syntactically within expr src */
+	Expr	   *phexpr NODE_EQUAL_IGNORE();			/* the represented expression */
+	Relids		phrels NODE_EQUAL_IGNORE();			/* base relids syntactically within expr src */
 	Index		phid;			/* ID for PHV (unique within planner run) */
 	Index		phlevelsup;		/* > 0 if PHV belongs to outer query */
 } PlaceHolderVar;
