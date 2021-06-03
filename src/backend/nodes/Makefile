@@ -14,7 +14,7 @@ include $(top_builddir)/src/Makefile.global
 
 OBJS = \
 	bitmapset.o \
-	copyfuncs2.o \
+	copyfuncs.o \
 	equalfuncs.o \
 	extensible.o \
 	list.o \

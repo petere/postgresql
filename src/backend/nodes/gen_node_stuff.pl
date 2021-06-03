@@ -228,63 +228,13 @@ close $nt;
 
 # copyfuncs.c
 
-open my $cf, '>', 'copyfuncs2.c' or die;
-
-print $cf q!
-#include "postgres.h"
-
-#include "miscadmin.h"
-#include "nodes/extensible.h"
-#include "nodes/pathnodes.h"
-#include "nodes/plannodes.h"
-#include "utils/datum.h"
-#include "utils/rel.h"
-
-
-/*
- * Macros to simplify copying of different kinds of fields.  Use these
- * wherever possible to reduce the chance for silly typos.  Note that these
- * hard-wire the convention that the local variables in a Copy routine are
- * named 'newnode' and 'from'.
- */
-
-/* Copy a simple scalar field (int, float, bool, enum, etc) */
-#define COPY_SCALAR_FIELD(fldname) \
-	(newnode->fldname = from->fldname)
-
-/* Copy a field that is a pointer to some kind of Node or Node tree */
-#define COPY_NODE_FIELD(fldname) \
-	(newnode->fldname = copyObjectImpl(from->fldname))
-
-/* Copy a field that is a pointer to a Bitmapset */
-#define COPY_BITMAPSET_FIELD(fldname) \
-	(newnode->fldname = bms_copy(from->fldname))
-
-/* Copy a field that is a pointer to a C string, or perhaps NULL */
-#define COPY_STRING_FIELD(fldname) \
-	(newnode->fldname = from->fldname ? pstrdup(from->fldname) : (char *) NULL)
-
-/* Copy a field that is a pointer to a simple palloc'd object of size sz */
-#define COPY_POINTER_FIELD(fldname, sz) \
-	do { \
-		Size	_size = (sz); \
-		if (_size > 0) \
-		{ \
-			newnode->fldname = palloc(_size); \
-			memcpy(newnode->fldname, from->fldname, _size); \
-		} \
-	} while (0)
-
-/* Copy a parse location field (for Copy, this is same as scalar case) */
-#define COPY_LOCATION_FIELD(fldname) \
-	(newnode->fldname = from->fldname)
-
-!;
+open my $cf, '>', 'copyfuncs.inc.c' or die;
 
 foreach my $n (@node_types)
 {
 	next if $n ~~ @abstract;
 	next if grep { $_ eq $n } @no_copy;
+	next if $n eq 'Value' || $n eq 'A_Const' || $n eq 'ExtensibleNode';
 
 	print $cf "
 static $n *
@@ -294,58 +244,6 @@ _copy${n}(const $n *from)
 
 ";
 
-	if ($n eq 'Value')
-	{
-		# See also A_Const when changing this code! */
-		print $cf q!	COPY_SCALAR_FIELD(type);
-	switch (from->type)
-	{
-		case T_Integer:
-			COPY_SCALAR_FIELD(val.ival);
-			break;
-		case T_Float:
-		case T_String:
-		case T_BitString:
-			COPY_STRING_FIELD(val.str);
-			break;
-		case T_Null:
-			/* nothing to do */
-			break;
-		default:
-			elog(ERROR, "unrecognized node type: %d",
-				 (int) from->type);
-			break;
-	}
-!;
-	}
-	elsif ($n eq 'A_Const')
-	{
-		# This part must duplicate Value
-		print $cf q!	COPY_SCALAR_FIELD(val.type);
-	switch (from->val.type)
-	{
-		case T_Integer:
-			COPY_SCALAR_FIELD(val.val.ival);
-			break;
-		case T_Float:
-		case T_String:
-		case T_BitString:
-			COPY_STRING_FIELD(val.val.str);
-			break;
-		case T_Null:
-			/* nothing to do */
-			break;
-		default:
-			elog(ERROR, "unrecognized node type: %d",
-				 (int) from->val.type);
-			break;
-	}
-
-	COPY_LOCATION_FIELD(location);
-!;
-	}
-	# FIXME: ExtensibleNode
-	else
 	{
 		my $last_array_size_field;
 

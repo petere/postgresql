@@ -57,8 +57,11 @@
 #define COPY_POINTER_FIELD(fldname, sz) \
 	do { \
 		Size	_size = (sz); \
-		newnode->fldname = palloc(_size); \
-		memcpy(newnode->fldname, from->fldname, _size); \
+		if (_size > 0) \
+		{ \
+			newnode->fldname = palloc(_size); \
+			memcpy(newnode->fldname, from->fldname, _size); \
+		} \
 	} while (0)
 
 /* Copy a parse location field (for Copy, this is same as scalar case) */
@@ -66,6 +69,13 @@
 	(newnode->fldname = from->fldname)
 
 
+static A_Const * _copyA_Const(const A_Const *from);
+static Value *_copyValue(const Value *from);
+static ExtensibleNode *_copyExtensibleNode(const ExtensibleNode *from);
+
+#include "copyfuncs.inc.c"
+
+#ifdef OBSOLETE
 /* ****************************************************************
  *					 plannodes.h copy functions
  * ****************************************************************
@@ -2734,6 +2744,7 @@ _copyParamRef(const ParamRef *from)
 
 	return newnode;
 }
+#endif /*OBSOLETE*/
 
 static A_Const *
 _copyA_Const(const A_Const *from)
@@ -2766,6 +2777,7 @@ _copyA_Const(const A_Const *from)
 	return newnode;
 }
 
+#ifdef OBSOLETE
 static FuncCall *
 _copyFuncCall(const FuncCall *from)
 {
@@ -4874,6 +4886,7 @@ _copyDropSubscriptionStmt(const DropSubscriptionStmt *from)
 
 	return newnode;
 }
+#endif /*OBSOLETE*/
 
 /* ****************************************************************
  *					extensible.h copy functions
@@ -4900,6 +4913,7 @@ _copyExtensibleNode(const ExtensibleNode *from)
  *					value.h copy functions
  * ****************************************************************
  */
+
 static Value *
 _copyValue(const Value *from)
 {
@@ -4930,6 +4944,7 @@ _copyValue(const Value *from)
 }
 
 
+#ifdef OBSOLETE
 static ForeignKeyCacheInfo *
 _copyForeignKeyCacheInfo(const ForeignKeyCacheInfo *from)
 {
@@ -5878,3 +5893,4 @@ copyObjectImpl(const void *from)
 
 	return retval;
 }
+#endif /*OBSOLETE*/
