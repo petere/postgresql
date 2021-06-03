@@ -125,7 +125,9 @@ while (my $line = <$ifh>)
 			{
 				my $type = $1;
 				my $name = $2;
+				my $array_size = $3;
 
+				$type =~ s/^const\s*//;
 				$type =~ s/\s*$//;
 				$type =~ s/\s+\*$/*/;
 				die if $type eq '';
@@ -230,8 +232,11 @@ print $cf q!
 #define COPY_POINTER_FIELD(fldname, sz) \
 	do { \
 		Size	_size = (sz); \
-		newnode->fldname = palloc(_size); \
-		memcpy(newnode->fldname, from->fldname, _size); \
+		if (_size > 0) \
+		{ \
+			newnode->fldname = palloc(_size); \
+			memcpy(newnode->fldname, from->fldname, _size); \
+		} \
 	} while (0)
 
 /* Copy a parse location field (for Copy, this is same as scalar case) */
@@ -304,8 +309,11 @@ _copy${n}(const $n *from)
 	COPY_LOCATION_FIELD(location);
 !;
 	}
+	# FIXME: ExtensibleNode
 	else
 	{
+		my $last_array_size_field;
+
 		foreach my $f (@{$all_node_types{$n}->{fields}})
 		{
 			my $t = $all_node_types{$n}->{field_types}{$f};
@@ -324,6 +332,11 @@ _copy${n}(const $n *from)
 			elsif (grep {$_ eq $t} @scalar_types)
 			{
 				print $cf "\tCOPY_SCALAR_FIELD($f);\n";
+				$last_array_size_field = "from->$f";
+			}
+			elsif ($t =~ /(\w+)\*/ && $1 ~~ @scalar_types)
+			{
+				print $cf "\tCOPY_POINTER_FIELD($f, $last_array_size_field * sizeof($1));\n";
 			}
 			elsif ($t eq 'Datum' && $f eq 'constvalue') {
 				print $cf q?
@@ -350,12 +363,12 @@ _copy${n}(const $n *from)
 			elsif ($t =~ /(\w+)\*/)
 			{
 				print $cf "\tCOPY_NODE_FIELD($f);\n";
+				$last_array_size_field = "list_length(from->$f)" if $t eq 'List*';
 			}
 			else
 			{
 				print $cf "\tabort();\t/* TODO: ($t) $f */\n";
 			}
-			# FIXME: handle COPY_POINTER_FIELD special cases
 		}
 	}
 
