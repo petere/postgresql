@@ -1570,7 +1570,7 @@ typedef struct GatherMergePath
  * All join-type paths share these fields.
  */
 
-typedef struct ABSTRACT_NODE(JoinPath)
+typedef struct JoinPath
 {
 	Path		path;
 

@@ -19,6 +19,8 @@ my @node_types = ();
 my $in_struct = undef;
 my $subline;
 my $is_node_struct;
+my $supertype;
+my $supertype_field;
 my @my_fields;
 my %my_field_types;
 
@@ -31,12 +33,17 @@ my @scalar_types = qw{
 	bits32 bool char double int int8 int16 int32 int64 long uint8 uint16 uint32 uint64
 	AclMode AttrNumber Cost Index Oid Size StrategyNumber SubTransactionId TimeLineID XLogRecPtr
 };
+push @scalar_types, 'struct CustomScanMethods*';  # TODO: doc
+
+my @abstract = qw{BufferHeapTupleTableSlot HeapTupleTableSlot JoinPath MemoryContextData MinimalTupleTableSlot PartitionPruneStep VirtualTupleTableSlot};
 
 # pathnodes.h exceptions
-push @no_copy, qw(RelOptInfo IndexOptInfo Path PlannerGlobal EquivalenceClass EquivalenceMember);
+push @no_copy, qw(RelOptInfo IndexOptInfo Path PlannerGlobal EquivalenceClass EquivalenceMember ForeignKeyOptInfo GroupingSetData IncrementalSortPath IndexClause MinMaxAggInfo PathTarget PlannerInfo PlannerParamItem ParamPathInfo RollupData RowIdentityVarInfo StatisticExtInfo);
 push @scalar_types, qw(EquivalenceClass* EquivalenceMember* QualCost Selectivity);
 
-push @no_copy, qw(TIDBitmap);
+push @no_copy, qw(CallContext InlineCodeBlock);
+push @no_copy, qw(AppendState);  # FIXME
+push @no_copy, qw(Expr TIDBitmap);
 
 
 foreach my $infile (@ARGV)
@@ -49,7 +56,8 @@ while (my $line = <$ifh>)
 	$line =~ s!/\*.*$!!;
 	$line =~ s/\s*$//;
 	next if $line eq '';
-	next if $line =~ s!^\s*\*.*$!!;  # XXX starts with *
+	next if $line =~ m!^\s*\*.*$!;  # XXX starts with *
+	next if $line =~ /^#(define|ifdef|endif)/;
 
 	if ($in_struct)
 	{
@@ -58,29 +66,22 @@ while (my $line = <$ifh>)
 		if ($subline == 1)
 		{
 			$is_node_struct = 0;
+			$supertype = undef;
 			next if $line eq '{';
 			die;
 		}
 		elsif ($subline == 2)
 		{
-			if ($line =~ /^\s*NodeTag\s+type;/ ||
-				# FIXME
-				$line =~ /^\s*Expr\s+/ ||
-				$line =~ /^\s*Plan\s+/ ||
-				$line =~ /^\s*Scan\s+/ ||
-				$line =~ /^\s*Join\s+/ ||
-				$line =~ /^\s*Sort\s+/ ||
-				$line =~ /^\s*Path\s+/ ||
-				$line =~ /^\s*JoinPath\s+/ ||
-				$line =~ /^\s*SortPath\s+/ ||
-				$line =~ /^\s*PlanState\s+/ ||
-				$line =~ /^\s*ScanState\s+/ ||
-				$line =~ /^\s*JoinState\s+/ ||
-				$line =~ /^\s*PartitionPruneStep\s+/ ||
-				$line =~ /^\s*CreateStmt\s+/ ||
-				$line =~ /^\s*MemoryContextData\s+/)
+			if ($line =~ /^\s*NodeTag\s+type;/)
 			{
 				$is_node_struct = 1;
+				next;
+			}
+			elsif ($line =~ /\s*(\w+)\s+(\w+);/ && $1 ~~ @node_types)
+			{
+				$is_node_struct = 1;
+				$supertype = $1;
+				$supertype_field = $2;
 				next;
 			}
 		}
@@ -92,6 +93,18 @@ while (my $line = <$ifh>)
 				push @node_types, $in_struct;
 				my @f = @my_fields;
 				my %ft = %my_field_types;
+				if ($supertype)
+				{
+					my @superfields;
+					foreach my $sf (@{$all_node_types{$supertype}->{fields}})
+					{
+						my $fn = "${supertype_field}.$sf";
+						push @superfields, $fn;
+						$ft{$fn} = $all_node_types{$supertype}->{field_types}{$sf};
+					}
+					unshift @f, @superfields;
+				}
+				#warn "$in_struct has no fields\n" unless scalar(@f);
 				$all_node_types{$in_struct}->{fields} = \@f;
 				$all_node_types{$in_struct}->{field_types} = \%ft;
 
@@ -105,7 +118,8 @@ while (my $line = <$ifh>)
 					basename($infile) eq 'tuptable.h' ||
 					basename($infile) eq 'replnodes.h' ||
 					basename($infile) eq 'supportnodes.h' ||
-					$infile =~ /\.c$/
+					$infile =~ /\.c$/ ||
+					($supertype && ($supertype eq 'Path' || $supertype eq 'JoinPath'))
 				)
 				{
 					push @no_copy, $in_struct;
@@ -119,7 +133,7 @@ while (my $line = <$ifh>)
 		{
 			$in_struct = undef;
 		}
-		elsif ($line =~ /^\s*(.+)\s*\b(\w+);/)
+		elsif ($line =~ /^\s*(.+)\s*\b(\w+)(\[\w+\])?;/)
 		{
 			if ($is_node_struct)
 			{
@@ -131,21 +145,36 @@ while (my $line = <$ifh>)
 				$type =~ s/\s*$//;
 				$type =~ s/\s+\*$/*/;
 				die if $type eq '';
+				$type = $type . $array_size if $array_size;
 				push @my_fields, $name;
 				$my_field_types{$name} = $type;
+			}
+		}
+		else
+		{
+			if ($is_node_struct)
+			{
+				#warn "$infile:$.: could not parse \"$line\"\n";
 			}
 		}
 	}
 	else
 	{
-		if ($line =~ /^typedef struct (\w+)(\s*\/\*.*)?$/)
+		if ($line =~ /^typedef struct (\w+)(\s*\/\*.*)?$/ && $1 ne 'Node')
 		{
 			$in_struct = $1;
 			$subline = 0;
 		}
 		elsif ($line =~ /^typedef (\w+) (\w+);$/ && $1 ~~ @node_types)
 		{
-			push @node_types, $2;
+			my $alias_of = $1;
+			my $n = $2;
+
+			push @node_types, $n;
+			my @f = @{$all_node_types{$alias_of}->{fields}};
+			my %ft = %{$all_node_types{$alias_of}->{field_types}};
+			$all_node_types{$n}->{fields} = \@f;
+			$all_node_types{$n}->{field_types} = \%ft;
 		}
 		elsif ($line =~ /^typedef enum (\w+)(\s*\/\*.*)?$/)
 		{
@@ -163,13 +192,18 @@ if ($in_struct)
 	close $ifh;
 } # for each file
 
+push @no_copy, 'MemoryContextData';
+push @node_types, 'Value';
 push @node_types, 'IntList', 'OidList'; # aliases for List
 push @no_copy, 'List', 'IntList', 'OidList';
 push @node_types, 'Integer', 'Float', 'String', 'BitString', 'Null'; # aliases for Value
 push @no_copy, 'Integer', 'Float', 'String', 'BitString', 'Null'; # aliases for Value
 push @node_types, 'AppendState', 'SpecialJoinInfo', 'TIDBitmap', 'PlannerInfo', 'IndexOptInfo'; # FIXME
 
+
 # nodetags.h
+
+# FIXME: only overwrite nodetags.h if it actually changed
 
 open my $nt, '>', 'nodetags.h' or die;
 
@@ -182,6 +216,7 @@ $i++;
 
 foreach my $n (@node_types)
 {
+	next if $n ~~ @abstract;
 	print $nt "\tT_${n} = $i,\n";
 	$i++;
 }
@@ -189,6 +224,7 @@ foreach my $n (@node_types)
 print $nt "} NodeTag;\n";
 
 close $nt;
+
 
 # copyfuncs.c
 
@@ -247,9 +283,8 @@ print $cf q!
 
 foreach my $n (@node_types)
 {
+	next if $n ~~ @abstract;
 	next if grep { $_ eq $n } @no_copy;
-
-	# FIXME: copy superclass fields if not plain Node, e.g., CopyPlanFields(), CopyScanFields()
 
 	print $cf "
 static $n *
@@ -360,10 +395,21 @@ _copy${n}(const $n *from)
 
 ?;
 			}
-			elsif ($t =~ /(\w+)\*/)
+			elsif ($f =~ /_cache/)
+			{
+				# XXX hack for RestrictInfo.scansel_cache
+				print $cf "\t/* skip: $f */\n";
+			}
+			#elsif ($t =~ /(\w+)\*/)
+			elsif ($t =~ /(\w+)\*/ && ($1 ~~ @node_types || $1 eq 'Node' || $1 eq 'Expr'))
 			{
 				print $cf "\tCOPY_NODE_FIELD($f);\n";
 				$last_array_size_field = "list_length(from->$f)" if $t eq 'List*';
+			}
+			elsif ($t =~ /\w+\[/)
+			{
+				# COPY_SCALAR_FIELD might work for these, but let's not assume that
+				print $cf "\tmemcpy(newnode->$f, from->$f, sizeof(newnode->$f));\n";
 			}
 			else
 			{
@@ -396,6 +442,7 @@ copyObjectImpl(const void *from)
 
 foreach my $n (@node_types)
 {
+	next if $n ~~ @abstract;
 	next if grep { $_ eq $n } @no_copy;
 	next if $n eq 'Value';
 

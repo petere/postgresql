@@ -365,7 +365,7 @@
  * copyObject(), to facilitate catching errors and omissions in
  * copyObject().
  */
-/* #define COPY_PARSE_PLAN_TREES */
+#define COPY_PARSE_PLAN_TREES
 
 /*
  * Define this to force all parse and plan trees to be passed through

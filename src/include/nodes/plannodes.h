@@ -348,7 +348,10 @@ typedef struct Scan
  *		sequential scan node
  * ----------------
  */
-typedef Scan SeqScan;
+typedef struct SeqScan
+{
+	Scan		scan;
+} SeqScan;
 
 /* ----------------
  *		table sample scan node
@@ -1209,7 +1212,7 @@ typedef struct PartitionedRelPruneInfo
  *
  * step_id is the global identifier of the step within its pruning context.
  */
-typedef struct ABSTRACT_NODE(PartitionPruneStep)
+typedef struct PartitionPruneStep
 {
 	NodeTag		type;
 	int			step_id;

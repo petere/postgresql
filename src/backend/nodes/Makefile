@@ -38,7 +38,6 @@ nodefiles = \
 	nodes/primnodes.h \
 	nodes/pathnodes.h \
 	nodes/memnodes.h \
-	nodes/value.h \
 	nodes/pg_list.h \
 	nodes/extensible.h \
 	nodes/parsenodes.h \

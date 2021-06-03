@@ -286,7 +286,6 @@ typedef enum NodeTag
 	/*
 	 * TAGS FOR MEMORY NODES (memnodes.h)
 	 */
-	T_MemoryContext,
 	T_AllocSetContext,
 	T_SlabContext,
 	T_GenerationContext,
@@ -532,8 +531,6 @@ typedef enum NodeTag
 	T_SupportRequestIndexCondition	/* in nodes/supportnodes.h */
 } NodeTag;
 #endif
-
-#define ABSTRACT_NODE(x) x
 
 /*
  * The first field of a node of any type is guaranteed to be the NodeTag.
