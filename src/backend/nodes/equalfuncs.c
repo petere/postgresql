@@ -93,7 +93,7 @@ static bool _equalValue(const Value *a, const Value *b);
 static bool _equalExtensibleNode(const ExtensibleNode *a, const ExtensibleNode *b);
 static bool _equalList(const List *a, const List *b);
 
-#include "equalfuncs.inc.c"
+#include "equalfuncs.inc1.c"
 
 #ifdef OBSOLETE
 /*
@@ -3116,7 +3116,6 @@ _equalValue(const Value *a, const Value *b)
 	return true;
 }
 
-#ifdef OBSOLETE
 /*
  * equal
  *	  returns whether two nodes are equal
@@ -3146,6 +3145,8 @@ equal(const void *a, const void *b)
 
 	switch (nodeTag(a))
 	{
+#include "equalfuncs.inc2.c"
+#ifdef OBSOLETE
 			/*
 			 * PRIMITIVE NODES
 			 */
@@ -3324,6 +3325,7 @@ equal(const void *a, const void *b)
 		case T_PlaceHolderInfo:
 			retval = _equalPlaceHolderInfo(a, b);
 			break;
+#endif /*OBSOLETE*/
 
 		case T_List:
 		case T_IntList:
@@ -3339,6 +3341,7 @@ equal(const void *a, const void *b)
 			retval = _equalValue(a, b);
 			break;
 
+#ifdef OBSOLETE
 			/*
 			 * EXTENSIBLE NODES
 			 */
@@ -3865,6 +3868,7 @@ equal(const void *a, const void *b)
 		case T_PartitionCmd:
 			retval = _equalPartitionCmd(a, b);
 			break;
+#endif /*OBSOLETE*/
 
 		default:
 			elog(ERROR, "unrecognized node type: %d",
@@ -3875,4 +3879,3 @@ equal(const void *a, const void *b)
 
 	return retval;
 }
-#endif /*OBSOLETE*/

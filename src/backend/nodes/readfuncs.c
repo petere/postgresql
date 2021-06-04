@@ -240,7 +240,7 @@ readBitmapset(void)
 	return _readBitmapset();
 }
 
-#include "readfuncs.inc.c"
+#include "readfuncs.inc1.c"
 
 /*
  * _readQuery

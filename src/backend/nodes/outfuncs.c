@@ -290,7 +290,7 @@ outDatum(StringInfo str, Datum value, int typlen, bool typbyval)
 }
 
 
-#include "outfuncs.inc.c"
+#include "outfuncs.inc1.c"
 
 #ifdef OBSOLETE
 /*

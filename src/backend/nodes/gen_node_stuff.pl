@@ -247,14 +247,28 @@ close $nt;
 
 # copyfuncs.c, equalfuncs.c
 
-open my $cf, '>', 'copyfuncs.inc.c' or die;
-open my $ef, '>', 'equalfuncs.inc.c' or die;
+open my $cf, '>', 'copyfuncs.inc1.c' or die;
+open my $ef, '>', 'equalfuncs.inc1.c' or die;
+open my $cf2, '>', 'copyfuncs.inc2.c' or die;
+open my $ef2, '>', 'equalfuncs.inc2.c' or die;
 
 foreach my $n (@node_types)
 {
 	next if $n ~~ @abstract;
 	next if grep { $_ eq $n } @no_copy;
-	next if $n eq 'Value' || $n eq 'A_Const' || $n eq 'ExtensibleNode';
+	next if $n eq 'Value';
+
+	print $cf2 "
+\t\tcase T_${n}:
+\t\t\tretval = _copy${n}(from);
+\t\t\tbreak;";
+
+	print $ef2 "
+\t\tcase T_${n}:
+\t\t\tretval = _equal${n}(a, b);
+\t\t\tbreak;";
+
+	next if $n eq 'A_Const' || $n eq 'ExtensibleNode';
 
 	print $cf "
 static $n *
@@ -380,132 +394,16 @@ _equal${n}(const $n *a, const $n *b)
 ";
 }
 
-print $cf "
-void *
-copyObjectImpl(const void *from)
-{
-\tvoid\t   *retval;
-
-\tif (from == NULL)
-\t\treturn NULL;
-
-\t/* Guard against stack overflow due to overly complex expressions */
-\tcheck_stack_depth();
-
-\tswitch (nodeTag(from))
-\t{
-";
-
-print $ef "
-bool
-equal(const void *a, const void *b)
-{
-	bool		retval;
-
-	if (a == b)
-		return true;
-
-	/*
-	 * note that a!=b, so only one of them can be NULL
-	 */
-	if (a == NULL || b == NULL)
-		return false;
-
-	/*
-	 * are they the same type of nodes?
-	 */
-	if (nodeTag(a) != nodeTag(b))
-		return false;
-
-	/* Guard against stack overflow due to overly complex expressions */
-	check_stack_depth();
-
-	switch (nodeTag(a))
-	{
-";
-
-foreach my $n (@node_types)
-{
-	next if $n ~~ @abstract;
-	next if grep { $_ eq $n } @no_copy;
-	next if $n eq 'Value';
-
-	print $cf "
-\t\tcase T_${n}:
-\t\t\tretval = _copy${n}(from);
-\t\t\tbreak;";
-
-	print $ef "
-\t\tcase T_${n}:
-\t\t\tretval = _equal${n}(a, b);
-\t\t\tbreak;";
-}
-
-print $cf "
-\t\tcase T_Integer:
-\t\tcase T_Float:
-\t\tcase T_String:
-\t\tcase T_BitString:
-\t\tcase T_Null:
-\t\t\tretval = _copyValue(from);
-\t\t\tbreak;";
-
-print $ef "
-\t\tcase T_Integer:
-\t\tcase T_Float:
-\t\tcase T_String:
-\t\tcase T_BitString:
-\t\tcase T_Null:
-\t\t\tretval = _equalValue(a, b);
-\t\t\tbreak;";
-
-print $cf "
-\t\tcase T_List:
-\t\t\tretval = list_copy_deep(from);
-\t\t\tbreak;
-\t\tcase T_IntList:
-\t\tcase T_OidList:
-\t\t\tretval = list_copy(from);
-\t\t\tbreak;";
-
-print $ef "
-\t\tcase T_List:
-\t\tcase T_IntList:
-\t\tcase T_OidList:
-\t\t\tretval = _equalList(a, b);
-\t\t\tbreak;";
-
-print $cf "
-\t\tdefault:
-\t\t\telog(ERROR, \"unrecognized node type: %d\", (int) nodeTag(from));
-\t\t\tretval = 0;\t\t\t/* keep compiler quiet */
-\t\t\tbreak;
-\t}
-
-\treturn retval;
-}
-";
-
-print $ef "
-		default:
-			elog(ERROR, \"unrecognized node type: %d\",
-				 (int) nodeTag(a));
-			retval = false;		/* keep compiler quiet */
-			break;
-	}
-
-	return retval;
-}
-";
-
 close $cf;
 close $ef;
+close $cf2;
+close $ef2;
 
 
 # outfuncs.c, readfuncs.c
 
-open my $of, '>', 'outfuncs.inc.c' or die;
-open my $rf, '>', 'readfuncs.inc.c' or die;
+open my $of, '>', 'outfuncs.inc1.c' or die;
+open my $rf, '>', 'readfuncs.inc1.c' or die;
 open my $of2, '>', 'outfuncs.inc2.c' or die;
 open my $rf2, '>', 'readfuncs.inc2.c' or die;
 
@@ -546,20 +444,20 @@ foreach my $n (@node_types)
 		$N = $name_map{$N};
 	}
 
+	my $no_read = 0;
+	if ($n eq 'A_Star' || $n eq 'A_Const' || $n eq 'A_Expr' || $n eq 'Constraint' || $n =~ /Path$/ || $n eq 'ForeignKeyCacheInfo' || $n eq 'ForeignKeyOptInfo' || $n eq 'PathTarget' || $n eq 'Value')
+	{
+		$no_read = 1;
+	}
+
 	print $of2 "\t\t\tcase T_${n}:\n".
 	  "\t\t\t\t_out${n}(str, obj);\n".
 	  "\t\t\t\tbreak;\n";
 
 	print $rf2 "\telse if (MATCH(\"$N\", " . length($N) . "))\n".
-	  "\t\treturn_value = _read${n}();\n";
+	  "\t\treturn_value = _read${n}();\n" unless $no_read;
 
 	next if $n ~~ @custom_readwrite;
-
-	my $no_read = 0;
-	if ($n eq 'A_Star' || $n =~ /Path$/ || $n eq 'ForeignKeyCacheInfo' || $n eq 'ForeignKeyOptInfo' || $n eq 'PathTarget')
-	{
-		$no_read = 1;
-	}
 
 	print $of "
 static void

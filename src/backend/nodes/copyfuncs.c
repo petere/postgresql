@@ -73,7 +73,7 @@ static A_Const * _copyA_Const(const A_Const *from);
 static Value *_copyValue(const Value *from);
 static ExtensibleNode *_copyExtensibleNode(const ExtensibleNode *from);
 
-#include "copyfuncs.inc.c"
+#include "copyfuncs.inc1.c"
 
 #ifdef OBSOLETE
 /* ****************************************************************
@@ -4961,6 +4961,7 @@ _copyForeignKeyCacheInfo(const ForeignKeyCacheInfo *from)
 
 	return newnode;
 }
+#endif /*OBSOLETE*/
 
 
 /*
@@ -4982,6 +4983,8 @@ copyObjectImpl(const void *from)
 
 	switch (nodeTag(from))
 	{
+#include "copyfuncs.inc2.c"
+#ifdef OBSOLETE
 			/*
 			 * PLAN NODES
 			 */
@@ -5323,6 +5326,7 @@ copyObjectImpl(const void *from)
 		case T_PlaceHolderInfo:
 			retval = _copyPlaceHolderInfo(from);
 			break;
+#endif /*OBSOLETE*/
 
 			/*
 			 * VALUE NODES
@@ -5351,6 +5355,7 @@ copyObjectImpl(const void *from)
 			retval = list_copy(from);
 			break;
 
+#ifdef OBSOLETE
 			/*
 			 * EXTENSIBLE NODES
 			 */
@@ -5884,6 +5889,7 @@ copyObjectImpl(const void *from)
 		case T_ForeignKeyCacheInfo:
 			retval = _copyForeignKeyCacheInfo(from);
 			break;
+#endif
 
 		default:
 			elog(ERROR, "unrecognized node type: %d", (int) nodeTag(from));
@@ -5893,4 +5899,3 @@ copyObjectImpl(const void *from)
 
 	return retval;
 }
-#endif /*OBSOLETE*/
