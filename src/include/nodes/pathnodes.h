@@ -706,8 +706,8 @@ typedef struct RelOptInfo
 	RTEKind		rtekind;		/* RELATION, SUBQUERY, FUNCTION, etc */
 	AttrNumber	min_attr;		/* smallest attrno of rel (often <0) */
 	AttrNumber	max_attr;		/* largest attrno of rel */
-	Relids	   *attr_needed;	/* array indexed [min_attr .. max_attr] */
-	int32	   *attr_widths;	/* array indexed [min_attr .. max_attr] */
+	Relids	   *attr_needed NODE_READWRITE_IGNORE();	/* array indexed [min_attr .. max_attr] */
+	int32	   *attr_widths NODE_READWRITE_IGNORE();	/* array indexed [min_attr .. max_attr] */
 	List	   *lateral_vars;	/* LATERAL Vars and PHVs referenced by rel */
 	Relids		lateral_referencers;	/* rels that reference me laterally */
 	List	   *indexlist;		/* list of IndexOptInfo */
@@ -732,9 +732,9 @@ typedef struct RelOptInfo
 	void	   *fdw_private;
 
 	/* cache space for remembering if we have proven this relation unique */
-	List	   *unique_for_rels;	/* known unique for these other relid
+	List	   *unique_for_rels NODE_READWRITE_IGNORE();	/* known unique for these other relid
 									 * set(s) */
-	List	   *non_unique_for_rels;	/* known not unique for these set(s) */
+	List	   *non_unique_for_rels NODE_READWRITE_IGNORE();	/* known not unique for these set(s) */
 
 	/* used by various scans and joins: */
 	List	   *baserestrictinfo;	/* RestrictInfo structures (if base rel) */

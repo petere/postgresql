@@ -1,2 +1,5 @@
 /copyfuncs.inc.c
+/equalfuncs.inc.c
+/outfuncs.inc.c
+/readfuncs.inc.c
 /nodetags.h

@@ -240,6 +240,9 @@ readBitmapset(void)
 	return _readBitmapset();
 }
 
+#include "readfuncs.inc.c"
+
+#ifdef OBSOLETE
 /*
  * _readQuery
  */
@@ -589,6 +592,7 @@ _readVar(void)
 
 	READ_DONE();
 }
+#endif /*OBSOLETE*/
 
 /*
  * _readConst
@@ -615,6 +619,7 @@ _readConst(void)
 	READ_DONE();
 }
 
+#ifdef OBSOLETE
 /*
  * _readParam
  */
@@ -839,6 +844,7 @@ _readScalarArrayOpExpr(void)
 
 	READ_DONE();
 }
+#endif /*OBSOLETE*/
 
 /*
  * _readBoolExpr
@@ -866,6 +872,7 @@ _readBoolExpr(void)
 	READ_DONE();
 }
 
+#ifdef OBSOLETE
 /*
  * _readSubLink
  */
@@ -1421,6 +1428,7 @@ _readAppendRelInfo(void)
  *	Stuff from parsenodes.h.
  */
 
+// FIXME
 /*
  * _readRangeTblEntry
  */
@@ -2085,6 +2093,7 @@ _readForeignScan(void)
 	READ_DONE();
 }
 
+// FIXME
 /*
  * _readCustomScan
  */
@@ -2635,6 +2644,7 @@ _readAlternativeSubPlan(void)
 
 	READ_DONE();
 }
+#endif /*OBSOLETE*/
 
 /*
  * _readExtensibleNode
@@ -2666,6 +2676,7 @@ _readExtensibleNode(void)
 	READ_DONE();
 }
 
+#ifdef OBSOLETE
 /*
  * _readPartitionBoundSpec
  */
@@ -2700,6 +2711,7 @@ _readPartitionRangeDatum(void)
 
 	READ_DONE();
 }
+#endif /*OBSOLETE*/
 
 /*
  * parseNodeString

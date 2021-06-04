@@ -28,6 +28,7 @@ my %my_field_attrs;
 my %all_node_types;
 
 my @no_copy;
+my @no_read_write;
 
 # FIXME: long allowed?
 my @scalar_types = qw{
@@ -42,9 +43,15 @@ my @abstract = qw{BufferHeapTupleTableSlot HeapTupleTableSlot JoinPath MemoryCon
 push @no_copy, qw(RelOptInfo IndexOptInfo Path PlannerGlobal EquivalenceClass EquivalenceMember ForeignKeyOptInfo GroupingSetData IncrementalSortPath IndexClause MinMaxAggInfo PathTarget PlannerInfo PlannerParamItem ParamPathInfo RollupData RowIdentityVarInfo StatisticExtInfo);
 push @scalar_types, qw(EquivalenceClass* EquivalenceMember* QualCost Selectivity);
 
+my @enum_types;
+
 push @no_copy, qw(CallContext InlineCodeBlock);
 push @no_copy, qw(AppendState);  # FIXME
 push @no_copy, qw(Expr TIDBitmap);
+
+push @no_read_write, qw(AccessPriv AlterTableCmd CallContext CreateOpClassItem FunctionParameter InferClause InlineCodeBlock ObjectWithArgs OnConflictClause PartitionCmd RoleSpec VacuumRelation);
+push @no_read_write, qw(AppendState);  # FIXME
+push @no_read_write, qw(TIDBitmap);
 
 
 foreach my $infile (@ARGV)
@@ -87,7 +94,7 @@ while (my $line = <$ifh>)
 			}
 		}
 
-		if ($line =~ /^\}\s*$in_struct;$/)
+		if ($line =~ /^\}\s*$in_struct;$/ || $line =~ /^\};$/)
 		{
 			if ($is_node_struct)
 			{
@@ -121,9 +128,14 @@ while (my $line = <$ifh>)
 					basename($infile) eq 'tuptable.h' ||
 					basename($infile) eq 'replnodes.h' ||
 					basename($infile) eq 'supportnodes.h' ||
-					$infile =~ /\.c$/ ||
-					($supertype && ($supertype eq 'Path' || $supertype eq 'JoinPath'))
+					$infile =~ /\.c$/
 				)
+				{
+					push @no_copy, $in_struct;
+					push @no_read_write, $in_struct;
+				}
+
+				if ($supertype && ($supertype eq 'Path' || $supertype eq 'JoinPath'))
 				{
 					push @no_copy, $in_struct;
 				}
@@ -133,11 +145,7 @@ while (my $line = <$ifh>)
 			%my_field_types = ();
 			%my_field_attrs = ();
 		}
-		elsif ($line =~ /^\};$/ && !$is_node_struct)
-		{
-			$in_struct = undef;
-		}
-		elsif ($line =~ /^\s*(.+)\s*\b(\w+)(\[\w+\])?\s*(NODE_EQUAL_IGNORE\w*\(\))?;/)
+		elsif ($line =~ /^\s*(.+)\s*\b(\w+)(\[\w+\])?\s*(NODE_[A-Z]+_IGNORE\w*\(\))?;/)
 		{
 			if ($is_node_struct)
 			{
@@ -166,7 +174,7 @@ while (my $line = <$ifh>)
 	}
 	else
 	{
-		if ($line =~ /^typedef struct (\w+)(\s*\/\*.*)?$/ && $1 ne 'Node')
+		if ($line =~ /^(?:typedef )?struct (\w+)(\s*\/\*.*)?$/ && $1 ne 'Node')
 		{
 			$in_struct = $1;
 			$subline = 0;
@@ -186,7 +194,7 @@ while (my $line = <$ifh>)
 		}
 		elsif ($line =~ /^typedef enum (\w+)(\s*\/\*.*)?$/)
 		{
-			push @scalar_types, $1;
+			push @enum_types, $1;
 		}
 	}
 }
@@ -206,7 +214,9 @@ push @node_types, 'IntList', 'OidList'; # aliases for List
 push @no_copy, 'List', 'IntList', 'OidList';
 push @node_types, 'Integer', 'Float', 'String', 'BitString', 'Null'; # aliases for Value
 push @no_copy, 'Integer', 'Float', 'String', 'BitString', 'Null'; # aliases for Value
-push @node_types, 'AppendState', 'SpecialJoinInfo', 'TIDBitmap', 'PlannerInfo', 'IndexOptInfo'; # FIXME
+push @node_types, 'TIDBitmap'; # FIXME
+
+my @value_nodes = qw(Integer Float String BitString Null);
 
 
 # nodetags.h
@@ -282,7 +292,7 @@ _equal${n}(const $n *a, const $n *b)
 				print $cf "\tCOPY_LOCATION_FIELD($f);\n";
 				print $ef "\tCOMPARE_LOCATION_FIELD($f);\n" unless $equal_ignore;
 			}
-			elsif (grep {$_ eq $t} @scalar_types)
+			elsif ($t ~~ @scalar_types || $t ~~ @enum_types)
 			{
 				print $cf "\tCOPY_SCALAR_FIELD($f);\n";
 				if (defined($a) && $a eq 'NODE_EQUAL_IGNORE_IF_ZERO()')
@@ -339,7 +349,6 @@ _equal${n}(const $n *a, const $n *b)
 				# XXX hack for RestrictInfo.scansel_cache
 				print $cf "\t/* skip: $f */\n";
 			}
-			#elsif ($t =~ /(\w+)\*/)
 			elsif ($t =~ /(\w+)\*/ && ($1 ~~ @node_types || $1 eq 'Node' || $1 eq 'Expr'))
 			{
 				print $cf "\tCOPY_NODE_FIELD($f);\n";
@@ -490,3 +499,225 @@ print $ef "
 
 close $cf;
 close $ef;
+
+
+# outfuncs.c, readfuncs.c
+
+open my $of, '>', 'outfuncs.inc.c' or die;
+open my $rf, '>', 'readfuncs.inc.c' or die;
+
+my %name_map = (
+	'ARRAYEXPR' => 'ARRAY',
+	'CASEEXPR' => 'CASE',
+	'CASEWHEN' => 'WHEN',
+	'COALESCEEXPR' => 'COALESCE',
+	'COLLATEEXPR' => 'COLLATE',
+	'DECLARECURSORSTMT' => 'DECLARECURSOR',
+	'MINMAXEXPR' => 'MINMAX',
+	'NOTIFYSTMT' => 'NOTIFY',
+	'RANGETBLENTRY' => 'RTE',
+	'ROWCOMPAREEXPR' => 'ROWCOMPARE',
+	'ROWEXPR' => 'ROW',
+);
+
+foreach my $n (@node_types)
+{
+	next if $n ~~ @abstract;
+	next if grep { $_ eq $n } @no_read_write;
+	next if $n eq 'List' || $n eq 'IntList' || $n eq 'OidList';
+	next if $n ~~ @value_nodes;
+	next if $n eq 'Expr' || $n eq 'Value' || $n eq 'A_Const' || $n eq 'Const' || $n eq 'ExtensibleNode' || $n eq 'BoolExpr';
+
+	my $N = uc $n;
+	$N =~ s/_//g;
+	if ($name_map{$N})
+	{
+		$N = $name_map{$N};
+	}
+
+	if ($n =~ /Stmt$/)
+	{
+		my @keep = qw(AlterStatsStmt CreateForeignTableStmt CreateStatsStmt CreateStmt DeclareCursorStmt ImportForeignSchemaStmt IndexStmt NotifyStmt PlannedStmt PLAssignStmt RawStmt ReturnStmt SelectStmt SetOperationStmt);
+		next unless $n ~~ @keep;
+	}
+
+	my $no_read = 0;
+	if ($n eq 'A_Star' || $n =~ /Path$/ || $n eq 'ForeignKeyCacheInfo' || $n eq 'ForeignKeyOptInfo' || $n eq 'PathTarget')
+	{
+		$no_read = 1;
+	}
+
+	print $of "
+static void
+_out${n}(StringInfo str, const $n *node)
+{
+\tWRITE_NODE_TYPE(\"$N\");
+
+";
+
+	print $rf "
+pg_attribute_unused()
+static $n *
+_read${n}(void)
+{
+\tREAD_LOCALS($n);
+
+" unless $no_read;
+
+	my $last_array_size_field;
+
+	foreach my $f (@{$all_node_types{$n}->{fields}})
+	{
+		my $t = $all_node_types{$n}->{field_types}{$f};
+		my $a = $all_node_types{$n}->{field_attrs}{$f};
+		my $readwrite_ignore = (defined($a) && $a eq 'NODE_READWRITE_IGNORE()');
+		next if $readwrite_ignore;
+
+		# XXX Previously, for subtyping, only the leaf field name is
+		# used. Ponder whether we want to keep it that way.
+
+		if ($t eq 'bool')
+		{
+			print $of "\tWRITE_BOOL_FIELD($f);\n";
+			print $rf "\tREAD_BOOL_FIELD($f);\n" unless $no_read;
+		}
+		elsif ($t eq 'int' && $f =~ 'location$')
+		{
+			print $of "\tWRITE_LOCATION_FIELD($f);\n";
+			print $rf "\tREAD_LOCATION_FIELD($f);\n" unless $no_read;
+		}
+		elsif ($t eq 'int' || $t eq 'int32' || $t eq 'AttrNumber' || $t eq 'StrategyNumber')
+		{
+			print $of "\tWRITE_INT_FIELD($f);\n";
+			print $rf "\tREAD_INT_FIELD($f);\n" unless $no_read;
+			$last_array_size_field = "node->$f" if $t eq 'int';
+		}
+		elsif ($t eq 'uint32' || $t eq 'bits32' || $t eq 'AclMode' || $t eq 'BlockNumber' || $t eq 'Index' || $t eq 'SubTransactionId')
+		{
+			print $of "\tWRITE_UINT_FIELD($f);\n";
+			print $rf "\tREAD_UINT_FIELD($f);\n" unless $no_read;
+		}
+		elsif ($t eq 'uint64')
+		{
+			print $of "\tWRITE_UINT64_FIELD($f);\n";
+			print $rf "\tREAD_UINT64_FIELD($f);\n" unless $no_read;
+		}
+		elsif ($t eq 'Oid')
+		{
+			print $of "\tWRITE_OID_FIELD($f);\n";
+			print $rf "\tREAD_OID_FIELD($f);\n" unless $no_read;
+		}
+		elsif ($t eq 'long')
+		{
+			print $of "\tWRITE_LONG_FIELD($f);\n";
+			print $rf "\tREAD_LONG_FIELD($f);\n" unless $no_read;
+		}
+		elsif ($t eq 'char')
+		{
+			print $of "\tWRITE_CHAR_FIELD($f);\n";
+			print $rf "\tREAD_CHAR_FIELD($f);\n" unless $no_read;
+		}
+		elsif ($t eq 'double')
+		{
+			# XXX Currently, double is only used in plan and path
+			# nodes for number-of-rows values, which are printed as
+			# whole numbers.  If this no longer holds, maybe change
+			# those to a specialized type.
+			# FIXME: allvisfrac
+			print $of "\tWRITE_FLOAT_FIELD($f, \"%.0f\");\n";
+			print $rf "\tREAD_FLOAT_FIELD($f);\n" unless $no_read;
+		}
+		elsif ($t eq 'Cost')
+		{
+			print $of "\tWRITE_FLOAT_FIELD($f, \"%.2f\");\n";
+			print $rf "\tREAD_FLOAT_FIELD($f);\n" unless $no_read;
+		}
+		elsif ($t eq 'QualCost')
+		{
+			print $of "\tWRITE_FLOAT_FIELD($f.startup, \"%.2f\");\n";
+			print $of "\tWRITE_FLOAT_FIELD($f.per_tuple, \"%.2f\");\n";
+			print $rf "\tREAD_FLOAT_FIELD($f.startup);\n" unless $no_read;
+			print $rf "\tREAD_FLOAT_FIELD($f.per_tuple);\n" unless $no_read;
+		}
+		elsif ($t eq 'Selectivity')
+		{
+			print $of "\tWRITE_FLOAT_FIELD($f, \"%.4f\");\n";
+			print $rf "\tREAD_FLOAT_FIELD($f);\n" unless $no_read;
+		}
+		elsif ($t eq 'char*')
+		{
+			print $of "\tWRITE_STRING_FIELD($f);\n";
+			print $rf "\tREAD_STRING_FIELD($f);\n" unless $no_read;
+		}
+		elsif ($t eq 'Bitmapset*' || $t eq 'Relids')
+		{
+			print $of "\tWRITE_BITMAPSET_FIELD($f);\n";
+			print $rf "\tREAD_BITMAPSET_FIELD($f);\n" unless $no_read;
+		}
+		elsif ($t ~~ @enum_types)
+		{
+			print $of "\tWRITE_ENUM_FIELD($f, $t);\n";
+			print $rf "\tREAD_ENUM_FIELD($f, $t);\n" unless $no_read;
+		}
+		elsif ($t =~ /(\w+)(\*|\[)/ && $1 ~~ @scalar_types)
+		{
+			warn "$t $n.$f" unless $last_array_size_field;
+			my $tt = uc $1;
+			print $of "\tWRITE_${tt}_ARRAY($f, $last_array_size_field);\n";
+			(my $l2 = $last_array_size_field) =~ s/node/local_node/;
+			print $rf "\tREAD_${tt}_ARRAY($f, $l2);\n" unless $no_read;
+		}
+		elsif ($t =~ /(\w+)\*/ && ($1 ~~ @node_types || $1 eq 'Node' || $1 eq 'Expr'))
+		{
+			unless ($1 ~~ @no_read_write)
+			{
+				print $of "\tWRITE_NODE_FIELD($f);\n";
+				print $rf "\tREAD_NODE_FIELD($f);\n" unless $no_read;
+			}
+			else
+			{
+				#print STDERR "*** skipping $t\n";
+			}
+			$last_array_size_field = "list_length(node->$f)" if $t eq 'List*';
+		}
+		elsif ($t eq 'struct CustomPathMethods*' ||	$t eq 'struct CustomScanMethods*')
+		{
+			print $of q{
+	appendStringInfoString(str, " :methods ");
+	outToken(str, node->methods->CustomName);
+};
+			print $rf q!
+	{
+		/* Lookup CustomScanMethods by CustomName */
+		char	   *custom_name;
+		const CustomScanMethods *methods;
+		token = pg_strtok(&length); /* skip methods: */
+		token = pg_strtok(&length); /* CustomName */
+		custom_name = nullable_string(token, length);
+		methods = GetCustomScanMethods(custom_name, false);
+		local_node->methods = methods;
+	}
+! unless $no_read;
+		}
+		elsif ($t eq 'ParamListInfo' || $t =~ /PartitionBoundInfoData/ || $t eq 'PartitionDirectory' || $t eq 'PartitionScheme' || $t eq 'void*' || $t =~ /\*\*$/)
+		{
+			# ignore
+		}
+		else
+		{
+			print $of "\tabort();\t/* TODO: ($t) $f */\n";
+			print $rf "\tabort();\t/* TODO: ($t) $f */\n" unless $no_read;
+		}
+	}
+
+	print $of "}
+";
+	print $rf "
+\tREAD_DONE();
+}
+" unless $no_read;
+}
+
+
+close $of;
+close $rf;
