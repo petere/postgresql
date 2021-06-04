@@ -88,11 +88,6 @@
 	((void) 0)
 
 
-static bool _equalA_Const(const A_Const *a, const A_Const *b);
-static bool _equalValue(const Value *a, const Value *b);
-static bool _equalExtensibleNode(const ExtensibleNode *a, const ExtensibleNode *b);
-static bool _equalList(const List *a, const List *b);
-
 #include "equalfuncs.inc1.c"
 
 #ifdef OBSOLETE

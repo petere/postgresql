@@ -69,10 +69,6 @@
 	(newnode->fldname = from->fldname)
 
 
-static A_Const * _copyA_Const(const A_Const *from);
-static Value *_copyValue(const Value *from);
-static ExtensibleNode *_copyExtensibleNode(const ExtensibleNode *from);
-
 #include "copyfuncs.inc1.c"
 
 #ifdef OBSOLETE
@@ -4915,7 +4911,6 @@ _copyExtensibleNode(const ExtensibleNode *from)
  *					value.h copy functions
  * ****************************************************************
  */
-
 static Value *
 _copyValue(const Value *from)
 {
@@ -5891,7 +5886,7 @@ copyObjectImpl(const void *from)
 		case T_ForeignKeyCacheInfo:
 			retval = _copyForeignKeyCacheInfo(from);
 			break;
-#endif
+#endif /*OBSOLETE*/
 
 		default:
 			elog(ERROR, "unrecognized node type: %d", (int) nodeTag(from));

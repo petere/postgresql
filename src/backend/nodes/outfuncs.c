@@ -1765,7 +1765,6 @@ _outOnConflictExpr(StringInfo str, const OnConflictExpr *node)
  * _outRelOptInfo; it's sufficient and less cluttering to print just the
  * required outer relids.
  */
-// FIXME
 static void
 _outPathInfo(StringInfo str, const Path *node)
 {
