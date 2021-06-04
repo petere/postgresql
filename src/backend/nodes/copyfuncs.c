@@ -1472,6 +1472,7 @@ _copyVar(const Var *from)
 
 	return newnode;
 }
+#endif /*OBSOLETE*/
 
 /*
  * _copyConst
@@ -1511,6 +1512,7 @@ _copyConst(const Const *from)
 	return newnode;
 }
 
+#ifdef OBSOLETE
 /*
  * _copyParam
  */

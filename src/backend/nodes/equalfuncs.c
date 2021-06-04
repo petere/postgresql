@@ -184,6 +184,7 @@ _equalVar(const Var *a, const Var *b)
 
 	return true;
 }
+#endif /*OBSOLETE*/
 
 static bool
 _equalConst(const Const *a, const Const *b)
@@ -206,6 +207,7 @@ _equalConst(const Const *a, const Const *b)
 						a->constbyval, a->constlen);
 }
 
+#ifdef OBSOLETE
 static bool
 _equalParam(const Param *a, const Param *b)
 {

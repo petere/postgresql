@@ -226,7 +226,7 @@ struct PlannerInfo
 	 * GEQO.
 	 */
 	List	   *join_rel_list;	/* list of join-relation RelOptInfos */
-	struct HTAB *join_rel_hash; /* optional hashtable for join relations */
+	struct HTAB *join_rel_hash pg_node_attr(readwrite_ignore); /* optional hashtable for join relations */
 
 	/*
 	 * When doing a dynamic-programming-style join search, join_rel_level[k]
@@ -331,7 +331,7 @@ struct PlannerInfo
 	AttrNumber *grouping_map;	/* for GroupingFunc fixup */
 	List	   *minmax_aggs;	/* List of MinMaxAggInfos */
 
-	MemoryContext planner_cxt;	/* context holding PlannerInfo */
+	MemoryContext planner_cxt pg_node_attr(readwrite_ignore);	/* context holding PlannerInfo */
 
 	double		total_table_pages;	/* # of pages in all non-dummy tables of
 									 * query */
@@ -728,7 +728,7 @@ typedef struct RelOptInfo
 	Oid			userid;			/* identifies user to check access as */
 	bool		useridiscurrent;	/* join is only valid for current user */
 	/* use "struct FdwRoutine" to avoid including fdwapi.h here */
-	struct FdwRoutine *fdwroutine;
+	struct FdwRoutine *fdwroutine pg_node_attr(readwrite_ignore);
 	void	   *fdw_private;
 
 	/* cache space for remembering if we have proven this relation unique */
@@ -2100,7 +2100,7 @@ typedef struct RestrictInfo
 	EquivalenceClass *right_ec pg_node_attr(equal_ignore readwrite_ignore); /* EquivalenceClass containing righthand */
 	EquivalenceMember *left_em pg_node_attr(equal_ignore); /* EquivalenceMember for lefthand */
 	EquivalenceMember *right_em pg_node_attr(equal_ignore);	/* EquivalenceMember for righthand */
-	List	   *scansel_cache pg_node_attr(equal_ignore);	/* list of MergeScanSelCache structs */
+	List	   *scansel_cache pg_node_attr(copy_ignore equal_ignore);	/* list of MergeScanSelCache structs */
 
 	/* transient workspace for use while considering a specific join path */
 	bool		outer_is_left pg_node_attr(equal_ignore);	/* T = outer var on left, F = on right */

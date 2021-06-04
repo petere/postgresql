@@ -1,7 +1,12 @@
 #!/usr/bin/perl
 #----------------------------------------------------------------------
 #
-# TODO
+# Generate node support files:
+# - nodetags.h
+# - copyfuncs
+# - equalfuncs
+# - readfuncs
+# - outfuncs
 #
 # src/backend/nodes/gen_node_stuff.pl
 #
@@ -14,211 +19,231 @@ use experimental 'smartmatch';
 
 use File::Basename;
 
-my @node_types = ();
-
-my $in_struct = undef;
-my $subline;
-my $is_node_struct;
-my $supertype;
-my $supertype_field;
-my @my_fields;
-my %my_field_types;
-my %my_field_attrs;
-
-my %all_node_types;
+my @node_types = qw(Node);
+my %node_type_info;
 
 my @no_copy;
 my @no_read_write;
 
-# FIXME: long allowed?
-my @scalar_types = qw{
+my @scalar_types = qw(
 	bits32 bool char double int int8 int16 int32 int64 long uint8 uint16 uint32 uint64
-	AclMode AttrNumber Cost Index Oid Size StrategyNumber SubTransactionId TimeLineID XLogRecPtr
-};
-push @scalar_types, 'struct CustomScanMethods*';  # TODO: doc
-
-my @abstract = qw{BufferHeapTupleTableSlot HeapTupleTableSlot JoinPath MemoryContextData MinimalTupleTableSlot PartitionPruneStep VirtualTupleTableSlot};
-
-# pathnodes.h exceptions
-push @no_copy, qw(RelOptInfo IndexOptInfo Path PlannerGlobal EquivalenceClass EquivalenceMember ForeignKeyOptInfo GroupingSetData IncrementalSortPath IndexClause MinMaxAggInfo PathTarget PlannerInfo PlannerParamItem ParamPathInfo RollupData RowIdentityVarInfo StatisticExtInfo);
-push @scalar_types, qw(EquivalenceClass* EquivalenceMember* QualCost Selectivity);
+	AclMode AttrNumber Cost Index Oid Selectivity Size StrategyNumber SubTransactionId TimeLineID XLogRecPtr
+);
 
 my @enum_types;
 
+# For abstract types we track their fields, so that subtypes can use
+# them, but we don't emit a node tag, so you can't instantiate them.
+my @abstract_types = qw(
+	Node
+	BufferHeapTupleTableSlot HeapTupleTableSlot MinimalTupleTableSlot VirtualTupleTableSlot
+	JoinPath
+	MemoryContextData
+	PartitionPruneStep
+);
+
+# These are additional node tags that don't have their own struct.
+my @extra_tags = qw(IntList OidList Integer Float String BitString Null);
+
+# These are regular nodes, but we skip parsing them from their header
+# files since we won't use their internal structure here anyway.
+push @node_types, qw(List Value);
+
+# XXX maybe this should be abstract?
+push @no_copy, qw(Expr);
+push @no_read_write, qw(Expr);
+
+# pathnodes.h exceptions
+push @no_copy, qw(
+	RelOptInfo IndexOptInfo Path PlannerGlobal EquivalenceClass EquivalenceMember ForeignKeyOptInfo
+	GroupingSetData IncrementalSortPath IndexClause MinMaxAggInfo PathTarget PlannerInfo PlannerParamItem
+	ParamPathInfo RollupData RowIdentityVarInfo StatisticExtInfo
+);
+push @scalar_types, qw(EquivalenceClass* EquivalenceMember* QualCost);
+
+# XXX various things we are not publishing right now to stay level
+# with the manual system
 push @no_copy, qw(CallContext InlineCodeBlock);
-push @no_copy, qw(AppendState);  # FIXME
-push @no_copy, qw(Expr TIDBitmap);
-
 push @no_read_write, qw(AccessPriv AlterTableCmd CallContext CreateOpClassItem FunctionParameter InferClause InlineCodeBlock ObjectWithArgs OnConflictClause PartitionCmd RoleSpec VacuumRelation);
-push @no_read_write, qw(AppendState);  # FIXME
-push @no_read_write, qw(TIDBitmap);
 
+
+## read input
 
 foreach my $infile (@ARGV)
 {
+	my $in_struct;
+	my $subline;
+	my $is_node_struct;
+	my $supertype;
+	my $supertype_field;
+
+	my @my_fields;
+	my %my_field_types;
+	my %my_field_attrs;
+
 	open my $ifh, '<', $infile or die;
 
-while (my $line = <$ifh>)
-{
-	chomp $line;
-	$line =~ s!/\*.*$!!;
-	$line =~ s/\s*$//;
-	next if $line eq '';
-	next if $line =~ m!^\s*\*.*$!;  # XXX starts with *
-	next if $line =~ /^#(define|ifdef|endif)/;
+	while (my $line = <$ifh>)
+	{
+		chomp $line;
+		$line =~ s!/\*.*$!!;
+		$line =~ s/\s*$//;
+		next if $line eq '';
+		next if $line =~ m!^\s*\*.*$!;  # line starts with *, probably comment continuation
+		next if $line =~ /^#(define|ifdef|endif)/;
+
+		if ($in_struct)
+		{
+			$subline++;
+
+			# first line should have opening brace
+			if ($subline == 1)
+			{
+				$is_node_struct = 0;
+				$supertype = undef;
+				next if $line eq '{';
+				die;
+			}
+			# second line should have node tag or supertype
+			elsif ($subline == 2)
+			{
+				if ($line =~ /^\s*NodeTag\s+type;/)
+				{
+					$is_node_struct = 1;
+					next;
+				}
+				elsif ($line =~ /\s*(\w+)\s+(\w+);/ && $1 ~~ @node_types)
+				{
+					$is_node_struct = 1;
+					$supertype = $1;
+					$supertype_field = $2;
+					next;
+				}
+			}
+
+			# end of struct
+			if ($line =~ /^\}\s*$in_struct;$/ || $line =~ /^\};$/)
+			{
+				if ($is_node_struct)
+				{
+					push @node_types, $in_struct;
+					my @f = @my_fields;
+					my %ft = %my_field_types;
+					my %fa = %my_field_attrs;
+					if ($supertype)
+					{
+						my @superfields;
+						foreach my $sf (@{$node_type_info{$supertype}->{fields}})
+						{
+							my $fn = "${supertype_field}.$sf";
+							push @superfields, $fn;
+							$ft{$fn} = $node_type_info{$supertype}->{field_types}{$sf};
+							$fa{$fn} = $node_type_info{$supertype}->{field_attrs}{$sf};
+						}
+						unshift @f, @superfields;
+					}
+					$node_type_info{$in_struct}->{fields} = \@f;
+					$node_type_info{$in_struct}->{field_types} = \%ft;
+					$node_type_info{$in_struct}->{field_attrs} = \%fa;
+
+					if (basename($infile) eq 'execnodes.h' ||
+						basename($infile) eq 'trigger.h' ||
+						basename($infile) eq 'event_trigger.h' ||
+						basename($infile) eq 'amapi.h' ||
+						basename($infile) eq 'tableam.h' ||
+						basename($infile) eq 'tsmapi.h' ||
+						basename($infile) eq 'fdwapi.h' ||
+						basename($infile) eq 'tuptable.h' ||
+						basename($infile) eq 'replnodes.h' ||
+						basename($infile) eq 'supportnodes.h' ||
+						$infile =~ /\.c$/
+					)
+					{
+						push @no_copy, $in_struct;
+						push @no_read_write, $in_struct;
+					}
+
+					if ($supertype && ($supertype eq 'Path' || $supertype eq 'JoinPath'))
+					{
+						push @no_copy, $in_struct;
+					}
+				}
+
+				# start new cycle
+				$in_struct = undef;
+				@my_fields = ();
+				%my_field_types = ();
+				%my_field_attrs = ();
+			}
+			# normal struct field
+			elsif ($line =~ /^\s*(.+)\s*\b(\w+)(\[\w+\])?\s*(?:pg_node_attr\(([\w ]*)\))?;/)
+			{
+				if ($is_node_struct)
+				{
+					my $type = $1;
+					my $name = $2;
+					my $array_size = $3;
+					my $attr = $4;
+
+					$type =~ s/^const\s*//;
+					$type =~ s/\s*$//;
+					$type =~ s/\s+\*$/*/;
+					die if $type eq '';
+					$type = $type . $array_size if $array_size;
+					push @my_fields, $name;
+					$my_field_types{$name} = $type;
+					$my_field_attrs{$name} = $attr;
+				}
+			}
+			else
+			{
+				if ($is_node_struct)
+				{
+					#warn "$infile:$.: could not parse \"$line\"\n";
+				}
+			}
+		}
+		# not in a struct
+		else
+		{
+			# start of a struct?
+			if ($line =~ /^(?:typedef )?struct (\w+)(\s*\/\*.*)?$/ && $1 ne 'Node')
+			{
+				$in_struct = $1;
+				$subline = 0;
+			}
+			# one node type typedef'ed directly from another
+			elsif ($line =~ /^typedef (\w+) (\w+);$/ && $1 ~~ @node_types)
+			{
+				my $alias_of = $1;
+				my $n = $2;
+
+				push @node_types, $n;
+				my @f = @{$node_type_info{$alias_of}->{fields}};
+				my %ft = %{$node_type_info{$alias_of}->{field_types}};
+				my %fa = %{$node_type_info{$alias_of}->{field_attrs}};
+				$node_type_info{$n}->{fields} = \@f;
+				$node_type_info{$n}->{field_types} = \%ft;
+				$node_type_info{$n}->{field_attrs} = \%fa;
+			}
+			# collect enum names
+			elsif ($line =~ /^typedef enum (\w+)(\s*\/\*.*)?$/)
+			{
+				push @enum_types, $1;
+			}
+		}
+	}
 
 	if ($in_struct)
 	{
-		$subline++;
-
-		if ($subline == 1)
-		{
-			$is_node_struct = 0;
-			$supertype = undef;
-			next if $line eq '{';
-			die;
-		}
-		elsif ($subline == 2)
-		{
-			if ($line =~ /^\s*NodeTag\s+type;/)
-			{
-				$is_node_struct = 1;
-				next;
-			}
-			elsif ($line =~ /\s*(\w+)\s+(\w+);/ && $1 ~~ @node_types)
-			{
-				$is_node_struct = 1;
-				$supertype = $1;
-				$supertype_field = $2;
-				next;
-			}
-		}
-
-		if ($line =~ /^\}\s*$in_struct;$/ || $line =~ /^\};$/)
-		{
-			if ($is_node_struct)
-			{
-				push @node_types, $in_struct;
-				my @f = @my_fields;
-				my %ft = %my_field_types;
-				my %fa = %my_field_attrs;
-				if ($supertype)
-				{
-					my @superfields;
-					foreach my $sf (@{$all_node_types{$supertype}->{fields}})
-					{
-						my $fn = "${supertype_field}.$sf";
-						push @superfields, $fn;
-						$ft{$fn} = $all_node_types{$supertype}->{field_types}{$sf};
-						$fa{$fn} = $all_node_types{$supertype}->{field_attrs}{$sf};
-					}
-					unshift @f, @superfields;
-				}
-				#warn "$in_struct has no fields\n" unless scalar(@f);
-				$all_node_types{$in_struct}->{fields} = \@f;
-				$all_node_types{$in_struct}->{field_types} = \%ft;
-				$all_node_types{$in_struct}->{field_attrs} = \%fa;
-
-				if (basename($infile) eq 'execnodes.h' ||
-					basename($infile) eq 'trigger.h' ||
-					basename($infile) eq 'event_trigger.h' ||
-					basename($infile) eq 'amapi.h' ||
-					basename($infile) eq 'tableam.h' ||
-					basename($infile) eq 'tsmapi.h' ||
-					basename($infile) eq 'fdwapi.h' ||
-					basename($infile) eq 'tuptable.h' ||
-					basename($infile) eq 'replnodes.h' ||
-					basename($infile) eq 'supportnodes.h' ||
-					$infile =~ /\.c$/
-				)
-				{
-					push @no_copy, $in_struct;
-					push @no_read_write, $in_struct;
-				}
-
-				if ($supertype && ($supertype eq 'Path' || $supertype eq 'JoinPath'))
-				{
-					push @no_copy, $in_struct;
-				}
-			}
-			$in_struct = undef;
-			@my_fields = ();
-			%my_field_types = ();
-			%my_field_attrs = ();
-		}
-		elsif ($line =~ /^\s*(.+)\s*\b(\w+)(\[\w+\])?\s*(?:pg_node_attr\(([\w ]*)\))?;/)
-		{
-			if ($is_node_struct)
-			{
-				my $type = $1;
-				my $name = $2;
-				my $array_size = $3;
-				my $attr = $4;
-
-				$type =~ s/^const\s*//;
-				$type =~ s/\s*$//;
-				$type =~ s/\s+\*$/*/;
-				die if $type eq '';
-				$type = $type . $array_size if $array_size;
-				push @my_fields, $name;
-				$my_field_types{$name} = $type;
-				$my_field_attrs{$name} = $attr;
-			}
-		}
-		else
-		{
-			if ($is_node_struct)
-			{
-				#warn "$infile:$.: could not parse \"$line\"\n";
-			}
-		}
+		die "runaway \"$in_struct\" in file \"$infile\"\n";
 	}
-	else
-	{
-		if ($line =~ /^(?:typedef )?struct (\w+)(\s*\/\*.*)?$/ && $1 ne 'Node')
-		{
-			$in_struct = $1;
-			$subline = 0;
-		}
-		elsif ($line =~ /^typedef (\w+) (\w+);$/ && $1 ~~ @node_types)
-		{
-			my $alias_of = $1;
-			my $n = $2;
-
-			push @node_types, $n;
-			my @f = @{$all_node_types{$alias_of}->{fields}};
-			my %ft = %{$all_node_types{$alias_of}->{field_types}};
-			my %fa = %{$all_node_types{$alias_of}->{field_attrs}};
-			$all_node_types{$n}->{fields} = \@f;
-			$all_node_types{$n}->{field_types} = \%ft;
-			$all_node_types{$n}->{field_attrs} = \%fa;
-		}
-		elsif ($line =~ /^typedef enum (\w+)(\s*\/\*.*)?$/)
-		{
-			push @enum_types, $1;
-		}
-	}
-}
-
-if ($in_struct)
-{
-	print STDERR "runaway \"$in_struct\"\n";
-	exit 1;
-}
 
 	close $ifh;
 } # for each file
 
-push @no_copy, 'MemoryContextData';
-push @node_types, 'Value';
-push @node_types, 'IntList', 'OidList'; # aliases for List
-push @no_copy, 'List', 'IntList', 'OidList';
-push @node_types, 'Integer', 'Float', 'String', 'BitString', 'Null'; # aliases for Value
-push @no_copy, 'Integer', 'Float', 'String', 'BitString', 'Null'; # aliases for Value
-push @node_types, 'TIDBitmap'; # FIXME
 
-my @value_nodes = qw(Integer Float String BitString Null);
-
+## write output
 
 # nodetags.h
 
@@ -226,21 +251,13 @@ my @value_nodes = qw(Integer Float String BitString Null);
 
 open my $nt, '>', 'nodetags.h' or die;
 
-my $i = 0;
-
-print $nt "typedef enum NodeTag\n";
-print $nt "{\n";
-print $nt "\tT_Invalid = $i,\n";
-$i++;
-
-foreach my $n (@node_types)
+my $i = 1;
+foreach my $n (@node_types,@extra_tags)
 {
-	next if $n ~~ @abstract;
+	next if $n ~~ @abstract_types;
 	print $nt "\tT_${n} = $i,\n";
 	$i++;
 }
-
-print $nt "} NodeTag;\n";
 
 close $nt;
 
@@ -252,10 +269,13 @@ open my $ef, '>', 'equalfuncs.inc1.c' or die;
 open my $cf2, '>', 'copyfuncs.inc2.c' or die;
 open my $ef2, '>', 'equalfuncs.inc2.c' or die;
 
+my @custom_copy = qw(A_Const Const ExtensibleNode);
+
 foreach my $n (@node_types)
 {
-	next if $n ~~ @abstract;
-	next if grep { $_ eq $n } @no_copy;
+	next if $n ~~ @abstract_types;
+	next if $n ~~ @no_copy;
+	next if $n eq 'List';
 	next if $n eq 'Value';
 
 	print $cf2 "
@@ -268,7 +288,7 @@ foreach my $n (@node_types)
 \t\t\tretval = _equal${n}(a, b);
 \t\t\tbreak;";
 
-	next if $n eq 'A_Const' || $n eq 'ExtensibleNode';
+	next if $n ~~ @custom_copy;
 
 	print $cf "
 static $n *
@@ -284,103 +304,69 @@ _equal${n}(const $n *a, const $n *b)
 {
 ";
 
-	{
-		my $last_array_size_field;
+	my $last_array_size_field;
 
-		foreach my $f (@{$all_node_types{$n}->{fields}})
+	foreach my $f (@{$node_type_info{$n}->{fields}})
+	{
+		my $t = $node_type_info{$n}->{field_types}{$f};
+		my $a = $node_type_info{$n}->{field_attrs}{$f} || '';
+		my $copy_ignore = ($a =~ /\bcopy_ignore\b/);
+		my $equal_ignore = ($a =~ /\bequal_ignore\b/);
+		if ($t eq 'char*')
 		{
-			my $t = $all_node_types{$n}->{field_types}{$f};
-			my $a = $all_node_types{$n}->{field_attrs}{$f};
-			my $equal_ignore = (defined($a) && $a =~ /\bequal_ignore\b/);
-			if ($t eq 'char*')
+			print $cf "\tCOPY_STRING_FIELD($f);\n" unless $copy_ignore;
+			print $ef "\tCOMPARE_STRING_FIELD($f);\n" unless $equal_ignore;
+		}
+		elsif ($t eq 'Bitmapset*' || $t eq 'Relids')
+		{
+			print $cf "\tCOPY_BITMAPSET_FIELD($f);\n" unless $copy_ignore;
+			print $ef "\tCOMPARE_BITMAPSET_FIELD($f);\n" unless $equal_ignore;
+		}
+		elsif ($t eq 'int' && $f =~ 'location$')
+		{
+			print $cf "\tCOPY_LOCATION_FIELD($f);\n" unless $copy_ignore;
+			print $ef "\tCOMPARE_LOCATION_FIELD($f);\n" unless $equal_ignore;
+		}
+		elsif ($t ~~ @scalar_types || $t ~~ @enum_types)
+		{
+			print $cf "\tCOPY_SCALAR_FIELD($f);\n" unless $copy_ignore;
+			if ($a =~ /\bequal_ignore_if_zero\b/)
 			{
-				print $cf "\tCOPY_STRING_FIELD($f);\n";
-				print $ef "\tCOMPARE_STRING_FIELD($f);\n" unless $equal_ignore;
-			}
-			elsif ($t eq 'Bitmapset*' || $t eq 'Relids')
-			{
-				print $cf "\tCOPY_BITMAPSET_FIELD($f);\n";
-				print $ef "\tCOMPARE_BITMAPSET_FIELD($f);\n" unless $equal_ignore;
-			}
-			elsif ($t eq 'int' && $f =~ 'location$')
-			{
-				print $cf "\tCOPY_LOCATION_FIELD($f);\n";
-				print $ef "\tCOMPARE_LOCATION_FIELD($f);\n" unless $equal_ignore;
-			}
-			elsif ($t ~~ @scalar_types || $t ~~ @enum_types)
-			{
-				print $cf "\tCOPY_SCALAR_FIELD($f);\n";
-				if (defined($a) && $a =~ /\bequal_ignore_if_zero\b/)
-				{
-					print $ef "\tif (a->$f != b->$f && a->$f != 0 && b->$f != 0)\n\t\treturn false;\n";
-				}
-				else
-				{
-					print $ef "\tCOMPARE_SCALAR_FIELD($f);\n" unless $equal_ignore || $t eq 'CoercionForm';
-				}
-				$last_array_size_field = "from->$f";
-			}
-			elsif ($t =~ /(\w+)\*/ && $1 ~~ @scalar_types)
-			{
-				my $tt = $1;
-				print $cf "\tCOPY_POINTER_FIELD($f, $last_array_size_field * sizeof($tt));\n";
-				(my $l2 = $last_array_size_field) =~ s/from/a/;
-				print $ef "\tCOMPARE_POINTER_FIELD($f, $l2 * sizeof($tt));\n" unless $equal_ignore;
-			}
-			elsif ($t eq 'Datum' && $f eq 'constvalue') {
-				print $cf q?
-	if (from->constbyval || from->constisnull)
-	{
-		/*
-		 * passed by value so just copy the datum. Also, don't try to copy
-		 * struct when value is null!
-		 */
-		newnode->constvalue = from->constvalue;
-	}
-	else
-	{
-		/*
-		 * passed by reference.  We need a palloc'd copy.
-		 */
-		newnode->constvalue = datumCopy(from->constvalue,
-										from->constbyval,
-										from->constlen);
-	}
-
-?;
-				print $ef q{
-	/*
-	 * We treat all NULL constants of the same type as equal. Someday this
-	 * might need to change?  But datumIsEqual doesn't work on nulls, so...
-	 */
-	if (!a->constisnull && !b->constisnull &&
-		!datumIsEqual(a->constvalue, b->constvalue,
-					  a->constbyval, a->constlen))
-		return false;
-};
-			}
-			elsif ($f =~ /_cache/)
-			{
-				# XXX hack for RestrictInfo.scansel_cache
-				print $cf "\t/* skip: $f */\n";
-			}
-			elsif ($t =~ /(\w+)\*/ && ($1 ~~ @node_types || $1 eq 'Node' || $1 eq 'Expr'))
-			{
-				print $cf "\tCOPY_NODE_FIELD($f);\n";
-				print $ef "\tCOMPARE_NODE_FIELD($f);\n" unless $equal_ignore;
-				$last_array_size_field = "list_length(from->$f)" if $t eq 'List*';
-			}
-			elsif ($t =~ /\w+\[/)
-			{
-				# COPY_SCALAR_FIELD might work for these, but let's not assume that
-				print $cf "\tmemcpy(newnode->$f, from->$f, sizeof(newnode->$f));\n";
-				print $ef "\tCOMPARE_POINTER_FIELD($f, sizeof(a->$f));\n" unless $equal_ignore;
+				print $ef "\tif (a->$f != b->$f && a->$f != 0 && b->$f != 0)\n\t\treturn false;\n";
 			}
 			else
 			{
-				print $cf "\tabort();\t/* TODO: ($t) $f */\n";
-				print $ef "\tabort();\t/* TODO: ($t) $f */\n" unless $equal_ignore;
+				print $ef "\tCOMPARE_SCALAR_FIELD($f);\n" unless $equal_ignore || $t eq 'CoercionForm';
 			}
+			$last_array_size_field = "from->$f";
+		}
+		elsif ($t =~ /(\w+)\*/ && $1 ~~ @scalar_types)
+		{
+			my $tt = $1;
+			print $cf "\tCOPY_POINTER_FIELD($f, $last_array_size_field * sizeof($tt));\n" unless $copy_ignore;
+			(my $l2 = $last_array_size_field) =~ s/from/a/;
+			print $ef "\tCOMPARE_POINTER_FIELD($f, $l2 * sizeof($tt));\n" unless $equal_ignore;
+		}
+		elsif ($t =~ /(\w+)\*/ && $1 ~~ @node_types)
+		{
+			print $cf "\tCOPY_NODE_FIELD($f);\n" unless $copy_ignore;
+			print $ef "\tCOMPARE_NODE_FIELD($f);\n" unless $equal_ignore;
+			$last_array_size_field = "list_length(from->$f)" if $t eq 'List*';
+		}
+		elsif ($t =~ /\w+\[/)
+		{
+			# COPY_SCALAR_FIELD might work for these, but let's not assume that
+			print $cf "\tmemcpy(newnode->$f, from->$f, sizeof(newnode->$f));\n" unless $copy_ignore;
+			print $ef "\tCOMPARE_POINTER_FIELD($f, sizeof(a->$f));\n" unless $equal_ignore;
+		}
+		elsif ($t eq 'struct CustomPathMethods*' ||	$t eq 'struct CustomScanMethods*')
+		{
+			print $cf "\tCOPY_SCALAR_FIELD($f);\n" unless $copy_ignore;
+			print $ef "\tCOMPARE_SCALAR_FIELD($f);\n" unless $equal_ignore;
+		}
+		else
+		{
+			die "could not handle type \"$t\" in struct \"$n\" field \"$f\"";
 		}
 	}
 
@@ -421,34 +407,28 @@ my %name_map = (
 	'ROWEXPR' => 'ROW',
 );
 
-my @custom_readwrite = qw(A_Const A_Expr BoolExpr Const Constraint ExtensibleNode Query RangeTblEntry Value);
+my @custom_readwrite = qw(A_Const A_Expr BoolExpr Const Constraint ExtensibleNode Query RangeTblEntry);
 
 foreach my $n (@node_types)
 {
-	next if $n ~~ @abstract;
-	next if grep { $_ eq $n } @no_read_write;
-	next if $n eq 'List' || $n eq 'IntList' || $n eq 'OidList';
-	next if $n ~~ @value_nodes;
-	next if $n eq 'Expr';
+	next if $n ~~ @abstract_types;
+	next if $n ~~ @no_read_write;
+	next if $n eq 'List';
+	next if $n eq 'Value';
 
+	# XXX For now, skip all "Stmt"s except that ones that were there before.
 	if ($n =~ /Stmt$/)
 	{
 		my @keep = qw(AlterStatsStmt CreateForeignTableStmt CreateStatsStmt CreateStmt DeclareCursorStmt ImportForeignSchemaStmt IndexStmt NotifyStmt PlannedStmt PLAssignStmt RawStmt ReturnStmt SelectStmt SetOperationStmt);
 		next unless $n ~~ @keep;
 	}
 
+	# XXX Also skip read support for those that didn't have it before.
+	my $no_read = ($n eq 'A_Star' || $n eq 'A_Const' || $n eq 'A_Expr' || $n eq 'Constraint' || $n =~ /Path$/ || $n eq 'ForeignKeyCacheInfo' || $n eq 'ForeignKeyOptInfo' || $n eq 'PathTarget' || $n eq 'Value');
+
 	my $N = uc $n;
 	$N =~ s/_//g;
-	if ($name_map{$N})
-	{
-		$N = $name_map{$N};
-	}
-
-	my $no_read = 0;
-	if ($n eq 'A_Star' || $n eq 'A_Const' || $n eq 'A_Expr' || $n eq 'Constraint' || $n =~ /Path$/ || $n eq 'ForeignKeyCacheInfo' || $n eq 'ForeignKeyOptInfo' || $n eq 'PathTarget' || $n eq 'Value')
-	{
-		$no_read = 1;
-	}
+	$N = $name_map{$N} if $name_map{$N};
 
 	print $of2 "\t\t\tcase T_${n}:\n".
 	  "\t\t\t\t_out${n}(str, obj);\n".
@@ -468,7 +448,6 @@ _out${n}(StringInfo str, const $n *node)
 ";
 
 	print $rf "
-pg_attribute_unused()
 static $n *
 _read${n}(void)
 {
@@ -478,11 +457,11 @@ _read${n}(void)
 
 	my $last_array_size_field;
 
-	foreach my $f (@{$all_node_types{$n}->{fields}})
+	foreach my $f (@{$node_type_info{$n}->{fields}})
 	{
-		my $t = $all_node_types{$n}->{field_types}{$f};
-		my $a = $all_node_types{$n}->{field_attrs}{$f} || '';
-		my $readwrite_ignore = (defined($a) && $a =~ /\breadwrite_ignore\b/);
+		my $t = $node_type_info{$n}->{field_types}{$f};
+		my $a = $node_type_info{$n}->{field_attrs}{$f} || '';
+		my $readwrite_ignore = ($a =~ /\breadwrite_ignore\b/);
 		next if $readwrite_ignore;
 
 		# XXX Previously, for subtyping, only the leaf field name is
@@ -531,12 +510,16 @@ _read${n}(void)
 		}
 		elsif ($t eq 'double')
 		{
-			# XXX Currently, double is only used in plan and path
-			# nodes for number-of-rows values, which are printed as
-			# whole numbers.  If this no longer holds, maybe change
-			# those to a specialized type.
-			# FIXME: allvisfrac
-			print $of "\tWRITE_FLOAT_FIELD($f, \"%.0f\");\n";
+			# XXX We out to split these into separate types, like Cost
+			# etc.
+			if ($f eq 'allvisfrac')
+			{
+				print $of "\tWRITE_FLOAT_FIELD($f, \"%.6f\");\n";
+			}
+			else
+			{
+				print $of "\tWRITE_FLOAT_FIELD($f, \"%.0f\");\n";
+			}
 			print $rf "\tREAD_FLOAT_FIELD($f);\n" unless $no_read;
 		}
 		elsif ($t eq 'Cost')
@@ -597,17 +580,10 @@ _read${n}(void)
 			  "\telse\n".
 			  "\t\toutBitmapset(str, NULL);\n";
 		}
-		elsif ($t =~ /(\w+)\*/ && ($1 ~~ @node_types || $1 eq 'Node' || $1 eq 'Expr'))
+		elsif ($t =~ /(\w+)\*/ && $1 ~~ @node_types)
 		{
-			unless ($1 ~~ @no_read_write)
-			{
-				print $of "\tWRITE_NODE_FIELD($f);\n";
-				print $rf "\tREAD_NODE_FIELD($f);\n" unless $no_read;
-			}
-			else
-			{
-				#print STDERR "*** skipping $t\n";
-			}
+			print $of "\tWRITE_NODE_FIELD($f);\n";
+			print $rf "\tREAD_NODE_FIELD($f);\n" unless $no_read;
 			$last_array_size_field = "list_length(node->$f)" if $t eq 'List*';
 		}
 		elsif ($t eq 'struct CustomPathMethods*' ||	$t eq 'struct CustomScanMethods*')
@@ -635,8 +611,7 @@ _read${n}(void)
 		}
 		else
 		{
-			print $of "\tabort();\t/* TODO: ($t) $f */\n";
-			print $rf "\tabort();\t/* TODO: ($t) $f */\n" unless $no_read;
+			die "could not handle type \"$t\" in struct \"$n\" field \"$f\"";
 		}
 	}
 

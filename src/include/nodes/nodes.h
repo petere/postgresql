@@ -14,8 +14,6 @@
 #ifndef NODES_H
 #define NODES_H
 
-#include "nodes/nodetags.h"
-#if 0
 /*
  * The first field of every node is NodeTag. Each node created (with makeNode)
  * will have one of the following tags as the value of its first field.
@@ -29,6 +27,8 @@ typedef enum NodeTag
 {
 	T_Invalid = 0,
 
+#include "nodes/nodetags.h"
+#ifdef OBSOLETE
 	/*
 	 * TAGS FOR EXECUTOR NODES (execnodes.h)
 	 */
@@ -529,9 +529,12 @@ typedef enum NodeTag
 	T_SupportRequestCost,		/* in nodes/supportnodes.h */
 	T_SupportRequestRows,		/* in nodes/supportnodes.h */
 	T_SupportRequestIndexCondition	/* in nodes/supportnodes.h */
+#endif /*OBSOLETE*/
 } NodeTag;
-#endif
 
+/*
+ * used in node definitions to set extra information for gen_node_stuff.pl
+ */
 #define pg_node_attr(x)
 
 /*

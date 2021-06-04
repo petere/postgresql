@@ -38,13 +38,11 @@ nodefiles = \
 	nodes/primnodes.h \
 	nodes/pathnodes.h \
 	nodes/memnodes.h \
-	nodes/pg_list.h \
 	nodes/extensible.h \
 	nodes/parsenodes.h \
 	nodes/replnodes.h \
 	commands/trigger.h \
 	commands/event_trigger.h \
-	nodes/tidbitmap.h \
 	foreign/fdwapi.h \
 	access/amapi.h \
 	access/tableam.h \
@@ -56,5 +54,5 @@ nodefiles = \
 	access/sdir.h
 
 node-stuff:
-	$(PERL) gen_node_stuff.pl $(addprefix ../../include/,$(nodefiles)) ../utils/mmgr/aset.c ../utils/mmgr/generation.c ../utils/mmgr/slab.c ../executor/nodeWindowAgg.c
+	$(PERL) gen_node_stuff.pl $(addprefix ../../include/,$(nodefiles)) tidbitmap.c ../utils/mmgr/aset.c ../utils/mmgr/generation.c ../utils/mmgr/slab.c ../executor/nodeWindowAgg.c
 	cd $(top_srcdir)/src/include/nodes && rm -f nodetags.h && ln -s ../../backend/nodes/nodetags.h .
