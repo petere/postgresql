@@ -19,6 +19,12 @@ use experimental 'smartmatch';
 
 use File::Basename;
 
+use FindBin;
+use lib "$FindBin::RealBin/../catalog";
+
+use Catalog;  # for RenameTempFile
+
+
 my @node_types = qw(Node);
 my %node_type_info;
 
@@ -81,7 +87,7 @@ foreach my $infile (@ARGV)
 	my %my_field_types;
 	my %my_field_attrs;
 
-	open my $ifh, '<', $infile or die;
+	open my $ifh, '<', $infile or die "could not open \"$infile\": $!";
 
 	while (my $line = <$ifh>)
 	{
@@ -245,11 +251,11 @@ foreach my $infile (@ARGV)
 
 ## write output
 
+my $tmpext  = ".tmp$$";
+
 # nodetags.h
 
-# FIXME: only overwrite nodetags.h if it actually changed
-
-open my $nt, '>', 'nodetags.h' or die;
+open my $nt, '>', 'nodetags.h' . $tmpext or die $!;
 
 my $i = 1;
 foreach my $n (@node_types,@extra_tags)
@@ -264,10 +270,10 @@ close $nt;
 
 # copyfuncs.c, equalfuncs.c
 
-open my $cf, '>', 'copyfuncs.inc1.c' or die;
-open my $ef, '>', 'equalfuncs.inc1.c' or die;
-open my $cf2, '>', 'copyfuncs.inc2.c' or die;
-open my $ef2, '>', 'equalfuncs.inc2.c' or die;
+open my $cf, '>', 'copyfuncs.inc1.c' . $tmpext or die $!;
+open my $ef, '>', 'equalfuncs.inc1.c' . $tmpext or die $!;
+open my $cf2, '>', 'copyfuncs.inc2.c' . $tmpext or die $!;
+open my $ef2, '>', 'equalfuncs.inc2.c' . $tmpext or die $!;
 
 my @custom_copy = qw(A_Const Const ExtensibleNode);
 
@@ -388,10 +394,10 @@ close $ef2;
 
 # outfuncs.c, readfuncs.c
 
-open my $of, '>', 'outfuncs.inc1.c' or die;
-open my $rf, '>', 'readfuncs.inc1.c' or die;
-open my $of2, '>', 'outfuncs.inc2.c' or die;
-open my $rf2, '>', 'readfuncs.inc2.c' or die;
+open my $of, '>', 'outfuncs.inc1.c' . $tmpext or die $!;
+open my $rf, '>', 'readfuncs.inc1.c' . $tmpext or die $!;
+open my $of2, '>', 'outfuncs.inc2.c' . $tmpext or die $!;
+open my $rf2, '>', 'readfuncs.inc2.c' . $tmpext or die $!;
 
 my %name_map = (
 	'ARRAYEXPR' => 'ARRAY',
@@ -627,3 +633,9 @@ close $of;
 close $rf;
 close $of2;
 close $rf2;
+
+
+foreach my $file (qw(nodetags.h copyfuncs.inc1.c copyfuncs.inc2.c equalfuncs.inc1.c equalfuncs.inc2.c outfuncs.inc1.c outfuncs.inc2.c readfuncs.inc1.c readfuncs.inc2.c))
+{
+	Catalog::RenameTempFile($file, $tmpext);
+}
