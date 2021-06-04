@@ -532,9 +532,7 @@ typedef enum NodeTag
 } NodeTag;
 #endif
 
-#define NODE_EQUAL_IGNORE()
-#define NODE_EQUAL_IGNORE_IF_ZERO()
-#define NODE_READWRITE_IGNORE()
+#define pg_node_attr(x)
 
 /*
  * The first field of a node of any type is guaranteed to be the NodeTag.

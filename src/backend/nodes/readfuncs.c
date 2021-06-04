@@ -242,7 +242,6 @@ readBitmapset(void)
 
 #include "readfuncs.inc.c"
 
-#ifdef OBSOLETE
 /*
  * _readQuery
  */
@@ -294,6 +293,7 @@ _readQuery(void)
 	READ_DONE();
 }
 
+#ifdef OBSOLETE
 /*
  * _readNotifyStmt
  */
@@ -1427,8 +1427,8 @@ _readAppendRelInfo(void)
 /*
  *	Stuff from parsenodes.h.
  */
+#endif /*OBSOLETE*/
 
-// FIXME
 /*
  * _readRangeTblEntry
  */
@@ -1523,6 +1523,7 @@ _readRangeTblEntry(void)
 	READ_DONE();
 }
 
+#ifdef OBSOLETE
 /*
  * _readRangeTblFunction
  */
@@ -2093,7 +2094,6 @@ _readForeignScan(void)
 	READ_DONE();
 }
 
-// FIXME
 /*
  * _readCustomScan
  */
@@ -2736,7 +2736,11 @@ parseNodeString(void)
 #define MATCH(tokname, namelen) \
 	(length == namelen && memcmp(token, tokname, namelen) == 0)
 
-	if (MATCH("QUERY", 5))
+	if (false)
+		;
+#include "readfuncs.inc2.c"
+#ifdef OBSOLETE
+	else if (MATCH("QUERY", 5))
 		return_value = _readQuery();
 	else if (MATCH("WITHCHECKOPTION", 15))
 		return_value = _readWithCheckOption();
@@ -2984,6 +2988,7 @@ parseNodeString(void)
 		return_value = _readPartitionBoundSpec();
 	else if (MATCH("PARTITIONRANGEDATUM", 19))
 		return_value = _readPartitionRangeDatum();
+#endif /*OBSOLETE*/
 	else
 	{
 		elog(ERROR, "badly formatted node string \"%.32s\"...", token);

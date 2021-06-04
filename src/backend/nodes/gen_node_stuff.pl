@@ -110,6 +110,7 @@ while (my $line = <$ifh>)
 						my $fn = "${supertype_field}.$sf";
 						push @superfields, $fn;
 						$ft{$fn} = $all_node_types{$supertype}->{field_types}{$sf};
+						$fa{$fn} = $all_node_types{$supertype}->{field_attrs}{$sf};
 					}
 					unshift @f, @superfields;
 				}
@@ -145,7 +146,7 @@ while (my $line = <$ifh>)
 			%my_field_types = ();
 			%my_field_attrs = ();
 		}
-		elsif ($line =~ /^\s*(.+)\s*\b(\w+)(\[\w+\])?\s*(NODE_[A-Z]+_IGNORE\w*\(\))?;/)
+		elsif ($line =~ /^\s*(.+)\s*\b(\w+)(\[\w+\])?\s*(?:pg_node_attr\(([\w ]*)\))?;/)
 		{
 			if ($is_node_struct)
 			{
@@ -276,7 +277,7 @@ _equal${n}(const $n *a, const $n *b)
 		{
 			my $t = $all_node_types{$n}->{field_types}{$f};
 			my $a = $all_node_types{$n}->{field_attrs}{$f};
-			my $equal_ignore = (defined($a) && $a eq 'NODE_EQUAL_IGNORE()');
+			my $equal_ignore = (defined($a) && $a =~ /\bequal_ignore\b/);
 			if ($t eq 'char*')
 			{
 				print $cf "\tCOPY_STRING_FIELD($f);\n";
@@ -295,7 +296,7 @@ _equal${n}(const $n *a, const $n *b)
 			elsif ($t ~~ @scalar_types || $t ~~ @enum_types)
 			{
 				print $cf "\tCOPY_SCALAR_FIELD($f);\n";
-				if (defined($a) && $a eq 'NODE_EQUAL_IGNORE_IF_ZERO()')
+				if (defined($a) && $a =~ /\bequal_ignore_if_zero\b/)
 				{
 					print $ef "\tif (a->$f != b->$f && a->$f != 0 && b->$f != 0)\n\t\treturn false;\n";
 				}
@@ -505,6 +506,8 @@ close $ef;
 
 open my $of, '>', 'outfuncs.inc.c' or die;
 open my $rf, '>', 'readfuncs.inc.c' or die;
+open my $of2, '>', 'outfuncs.inc2.c' or die;
+open my $rf2, '>', 'readfuncs.inc2.c' or die;
 
 my %name_map = (
 	'ARRAYEXPR' => 'ARRAY',
@@ -520,13 +523,21 @@ my %name_map = (
 	'ROWEXPR' => 'ROW',
 );
 
+my @custom_readwrite = qw(A_Const A_Expr BoolExpr Const Constraint ExtensibleNode Query RangeTblEntry Value);
+
 foreach my $n (@node_types)
 {
 	next if $n ~~ @abstract;
 	next if grep { $_ eq $n } @no_read_write;
 	next if $n eq 'List' || $n eq 'IntList' || $n eq 'OidList';
 	next if $n ~~ @value_nodes;
-	next if $n eq 'Expr' || $n eq 'Value' || $n eq 'A_Const' || $n eq 'Const' || $n eq 'ExtensibleNode' || $n eq 'BoolExpr';
+	next if $n eq 'Expr';
+
+	if ($n =~ /Stmt$/)
+	{
+		my @keep = qw(AlterStatsStmt CreateForeignTableStmt CreateStatsStmt CreateStmt DeclareCursorStmt ImportForeignSchemaStmt IndexStmt NotifyStmt PlannedStmt PLAssignStmt RawStmt ReturnStmt SelectStmt SetOperationStmt);
+		next unless $n ~~ @keep;
+	}
 
 	my $N = uc $n;
 	$N =~ s/_//g;
@@ -535,11 +546,14 @@ foreach my $n (@node_types)
 		$N = $name_map{$N};
 	}
 
-	if ($n =~ /Stmt$/)
-	{
-		my @keep = qw(AlterStatsStmt CreateForeignTableStmt CreateStatsStmt CreateStmt DeclareCursorStmt ImportForeignSchemaStmt IndexStmt NotifyStmt PlannedStmt PLAssignStmt RawStmt ReturnStmt SelectStmt SetOperationStmt);
-		next unless $n ~~ @keep;
-	}
+	print $of2 "\t\t\tcase T_${n}:\n".
+	  "\t\t\t\t_out${n}(str, obj);\n".
+	  "\t\t\t\tbreak;\n";
+
+	print $rf2 "\telse if (MATCH(\"$N\", " . length($N) . "))\n".
+	  "\t\treturn_value = _read${n}();\n";
+
+	next if $n ~~ @custom_readwrite;
 
 	my $no_read = 0;
 	if ($n eq 'A_Star' || $n =~ /Path$/ || $n eq 'ForeignKeyCacheInfo' || $n eq 'ForeignKeyOptInfo' || $n eq 'PathTarget')
@@ -569,8 +583,8 @@ _read${n}(void)
 	foreach my $f (@{$all_node_types{$n}->{fields}})
 	{
 		my $t = $all_node_types{$n}->{field_types}{$f};
-		my $a = $all_node_types{$n}->{field_attrs}{$f};
-		my $readwrite_ignore = (defined($a) && $a eq 'NODE_READWRITE_IGNORE()');
+		my $a = $all_node_types{$n}->{field_attrs}{$f} || '';
+		my $readwrite_ignore = (defined($a) && $a =~ /\breadwrite_ignore\b/);
 		next if $readwrite_ignore;
 
 		# XXX Previously, for subtyping, only the leaf field name is
@@ -667,6 +681,24 @@ _read${n}(void)
 			(my $l2 = $last_array_size_field) =~ s/node/local_node/;
 			print $rf "\tREAD_${tt}_ARRAY($f, $l2);\n" unless $no_read;
 		}
+		elsif ($t eq 'RelOptInfo*' && $a eq 'path_hack1')
+		{
+			print $of "\tappendStringInfoString(str, \" :parent_relids \");\n".
+			  "\toutBitmapset(str, node->$f->relids);\n";
+		}
+		elsif ($t eq 'PathTarget*' && $a eq 'path_hack2')
+		{
+			(my $f2 = $f) =~ s/pathtarget/parent/;
+			print $of "\tif (node->$f != node->$f2->reltarget)\n".
+			  "\t\tWRITE_NODE_FIELD($f);\n";
+		}
+		elsif ($t eq 'ParamPathInfo*' && $a eq 'path_hack3')
+		{
+			print $of "\tif (node->$f)\n".
+			  "\t\toutBitmapset(str, node->$f->ppi_req_outer);\n".
+			  "\telse\n".
+			  "\t\toutBitmapset(str, NULL);\n";
+		}
 		elsif ($t =~ /(\w+)\*/ && ($1 ~~ @node_types || $1 eq 'Node' || $1 eq 'Expr'))
 		{
 			unless ($1 ~~ @no_read_write)
@@ -718,6 +750,7 @@ _read${n}(void)
 " unless $no_read;
 }
 
-
 close $of;
 close $rf;
+close $of2;
+close $rf2;

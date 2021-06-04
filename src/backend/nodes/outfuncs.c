@@ -2398,7 +2398,6 @@ _outRelOptInfo(StringInfo str, const RelOptInfo *node)
 	WRITE_BITMAPSET_FIELD(all_partrels);
 }
 
-// FIXME
 static void
 _outIndexOptInfo(StringInfo str, const IndexOptInfo *node)
 {
@@ -2450,7 +2449,6 @@ _outForeignKeyOptInfo(StringInfo str, const ForeignKeyOptInfo *node)
 		appendStringInfo(str, " %d", list_length(node->rinfos[i]));
 }
 
-// FIXME
 static void
 _outStatisticExtInfo(StringInfo str, const StatisticExtInfo *node)
 {
@@ -2544,7 +2542,6 @@ _outParamPathInfo(StringInfo str, const ParamPathInfo *node)
 	WRITE_NODE_FIELD(ppi_clauses);
 }
 
-// FIXME
 static void
 _outRestrictInfo(StringInfo str, const RestrictInfo *node)
 {
@@ -2659,7 +2656,6 @@ _outPlaceHolderInfo(StringInfo str, const PlaceHolderInfo *node)
 	WRITE_INT_FIELD(ph_width);
 }
 
-// FIXME
 static void
 _outMinMaxAggInfo(StringInfo str, const MinMaxAggInfo *node)
 {
@@ -3037,8 +3033,8 @@ _outStatsElem(StringInfo str, const StatsElem *node)
 	WRITE_STRING_FIELD(name);
 	WRITE_NODE_FIELD(expr);
 }
+#endif /*OBSOLETE*/
 
-// FIXME
 static void
 _outQuery(StringInfo str, const Query *node)
 {
@@ -3110,6 +3106,7 @@ _outQuery(StringInfo str, const Query *node)
 	WRITE_INT_FIELD(stmt_len);
 }
 
+#ifdef OBSOLETE
 static void
 _outWithCheckOption(StringInfo str, const WithCheckOption *node)
 {
@@ -3248,8 +3245,8 @@ _outSetOperationStmt(StringInfo str, const SetOperationStmt *node)
 	WRITE_NODE_FIELD(colCollations);
 	WRITE_NODE_FIELD(groupClauses);
 }
+#endif /*OBSOLETE*/
 
-// FIXME
 static void
 _outRangeTblEntry(StringInfo str, const RangeTblEntry *node)
 {
@@ -3329,6 +3326,7 @@ _outRangeTblEntry(StringInfo str, const RangeTblEntry *node)
 	WRITE_NODE_FIELD(securityQuals);
 }
 
+#ifdef OBSOLETE
 static void
 _outRangeTblFunction(StringInfo str, const RangeTblFunction *node)
 {
@@ -3352,8 +3350,8 @@ _outTableSampleClause(StringInfo str, const TableSampleClause *node)
 	WRITE_NODE_FIELD(args);
 	WRITE_NODE_FIELD(repeatable);
 }
+#endif /*OBSOLETE*/
 
-// FIXME
 static void
 _outA_Expr(StringInfo str, const A_Expr *node)
 {
@@ -3428,7 +3426,6 @@ _outA_Expr(StringInfo str, const A_Expr *node)
 	WRITE_NODE_FIELD(rexpr);
 	WRITE_LOCATION_FIELD(location);
 }
-#endif /*OBSOLETE*/
 
 static void
 _outValue(StringInfo str, const Value *node)
@@ -3660,8 +3657,8 @@ _outRangeTableFuncCol(StringInfo str, const RangeTableFuncCol *node)
 	WRITE_NODE_FIELD(coldefexpr);
 	WRITE_LOCATION_FIELD(location);
 }
+#endif /*OBSOLETE*/
 
-// FIXME
 static void
 _outConstraint(StringInfo str, const Constraint *node)
 {
@@ -3781,6 +3778,7 @@ _outConstraint(StringInfo str, const Constraint *node)
 	}
 }
 
+#ifdef OBSOLETE
 static void
 _outForeignKeyCacheInfo(StringInfo str, const ForeignKeyCacheInfo *node)
 {
@@ -3870,6 +3868,8 @@ outNode(StringInfo str, const void *obj)
 		appendStringInfoChar(str, '{');
 		switch (nodeTag(obj))
 		{
+#include "outfuncs.inc2.c"
+#ifdef OBSOLETE
 			case T_PlannedStmt:
 				_outPlannedStmt(str, obj);
 				break;
@@ -4542,6 +4542,7 @@ outNode(StringInfo str, const void *obj)
 			case T_PartitionRangeDatum:
 				_outPartitionRangeDatum(str, obj);
 				break;
+#endif /*OBSOLETE*/
 
 			default:
 
