@@ -430,7 +430,7 @@ foreach my $n (@node_types)
 	}
 
 	# XXX Also skip read support for those that didn't have it before.
-	my $no_read = ($n eq 'A_Star' || $n eq 'A_Const' || $n eq 'A_Expr' || $n eq 'Constraint' || $n =~ /Path$/ || $n eq 'ForeignKeyCacheInfo' || $n eq 'ForeignKeyOptInfo' || $n eq 'PathTarget' || $n eq 'Value');
+	my $no_read = ($n eq 'A_Star' || $n eq 'A_Const' || $n eq 'A_Expr' || $n eq 'Constraint' || $n =~ /Path$/ || $n eq 'ForeignKeyCacheInfo' || $n eq 'ForeignKeyOptInfo' || $n eq 'PathTarget');
 
 	my $N = uc $n;
 	$N =~ s/_//g;
