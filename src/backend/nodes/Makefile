@@ -70,7 +70,7 @@ distprep: node-stuff-stamp
 
 .PHONY: generated-header-symlinks
 
-generated-header-symlinks: $(top_builddir)/src/include/catalog/header-stamp
+generated-header-symlinks: $(top_builddir)/src/include/nodes/header-stamp
 
 node-stuff-stamp: gen_node_stuff.pl
 	$(PERL) $< $(node_files)
