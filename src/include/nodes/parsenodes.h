@@ -821,7 +821,7 @@ typedef struct PartitionSpec
  * This represents the portion of the partition key space assigned to a
  * particular partition.  These are stored on disk in pg_class.relpartbound.
  */
-typedef struct PartitionBoundSpec
+struct PartitionBoundSpec
 {
 	NodeTag		type;
 
@@ -840,7 +840,7 @@ typedef struct PartitionBoundSpec
 	List	   *upperdatums;	/* List of PartitionRangeDatums */
 
 	int			location;		/* token location, or -1 if unknown */
-} PartitionBoundSpec;
+};
 
 /*
  * PartitionRangeDatum - one of the values in a range partition bound
