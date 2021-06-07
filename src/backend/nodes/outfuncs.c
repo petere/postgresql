@@ -4190,9 +4190,6 @@ outNode(StringInfo str, const void *obj)
 			case T_TidPath:
 				_outTidPath(str, obj);
 				break;
-			case T_TidRangePath:
-				_outTidRangePath(str, obj);
-				break;
 			case T_SubqueryScanPath:
 				_outSubqueryScanPath(str, obj);
 				break;
