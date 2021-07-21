@@ -3217,7 +3217,15 @@ print_function_arguments(StringInfo buf, HeapTuple proctup,
 		switch (argmode)
 		{
 			case PROARGMODE_IN:
-				modename = "";
+
+				/*
+				 * For procedures, explicitly mark all argument modes, so as
+				 * to avoid ambiguity with the SQL syntax for DROP PROCEDURE.
+				 */
+				if (proc->prokind == PROKIND_PROCEDURE)
+					modename = "IN ";
+				else
+					modename = "";
 				isinput = true;
 				break;
 			case PROARGMODE_INOUT:
@@ -7785,7 +7793,7 @@ find_param_referent(Param *param, deparse_context *context,
 			 */
 			foreach(lc2, ((Plan *) ancestor)->initPlan)
 			{
-				SubPlan    *subplan = castNode(SubPlan, lfirst(lc2));
+				SubPlan    *subplan = lfirst_node(SubPlan, lc2);
 
 				if (child_plan != (Plan *) list_nth(dpns->subplans,
 													subplan->plan_id - 1))
@@ -9399,7 +9407,7 @@ get_rule_expr(Node *node, deparse_context *context,
 						sep = "";
 						foreach(cell, spec->listdatums)
 						{
-							Const	   *val = castNode(Const, lfirst(cell));
+							Const	   *val = lfirst_node(Const, cell);
 
 							appendStringInfoString(buf, sep);
 							get_const_expr(val, context, -1);
@@ -11615,7 +11623,7 @@ generate_function_name(Oid funcid, int nargs, List *argnames, Oid *argtypes,
 	if (!force_qualify)
 		p_result = func_get_detail(list_make1(makeString(proname)),
 								   NIL, argnames, nargs, argtypes,
-								   !use_variadic, true,
+								   !use_variadic, true, false,
 								   &p_funcid, &p_rettype,
 								   &p_retset, &p_nvargs, &p_vatype,
 								   &p_true_typeids, NULL);
@@ -11982,7 +11990,7 @@ get_range_partbound_string(List *bound_datums)
 	foreach(cell, bound_datums)
 	{
 		PartitionRangeDatum *datum =
-		castNode(PartitionRangeDatum, lfirst(cell));
+		lfirst_node(PartitionRangeDatum, cell);
 
 		appendStringInfoString(buf, sep);
 		if (datum->kind == PARTITION_RANGE_DATUM_MINVALUE)

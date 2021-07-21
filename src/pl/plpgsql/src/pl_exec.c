@@ -38,6 +38,7 @@
 #include "plpgsql.h"
 #include "storage/proc.h"
 #include "tcop/cmdtag.h"
+#include "tcop/pquery.h"
 #include "tcop/tcopprot.h"
 #include "tcop/utility.h"
 #include "utils/array.h"
@@ -2161,22 +2162,20 @@ exec_stmt_call(PLpgSQL_execstate *estate, PLpgSQL_stmt_call *stmt)
 	 * Make a plan if we don't have one already.
 	 */
 	if (expr->plan == NULL)
-	{
 		exec_prepare_plan(estate, expr, 0);
 
-		/*
-		 * A CALL or DO can never be a simple expression.
-		 */
-		Assert(!expr->expr_simple_expr);
+	/*
+	 * A CALL or DO can never be a simple expression.
+	 */
+	Assert(!expr->expr_simple_expr);
 
-		/*
-		 * Also construct a DTYPE_ROW datum representing the plpgsql variables
-		 * associated with the procedure's output arguments.  Then we can use
-		 * exec_move_row() to do the assignments.
-		 */
-		if (stmt->is_call)
-			stmt->target = make_callstmt_target(estate, expr);
-	}
+	/*
+	 * Also construct a DTYPE_ROW datum representing the plpgsql variables
+	 * associated with the procedure's output arguments.  Then we can use
+	 * exec_move_row() to do the assignments.
+	 */
+	if (stmt->is_call && stmt->target == NULL)
+		stmt->target = make_callstmt_target(estate, expr);
 
 	paramLI = setup_param_list(estate, expr);
 
@@ -2246,18 +2245,17 @@ make_callstmt_target(PLpgSQL_execstate *estate, PLpgSQL_expr *expr)
 {
 	List	   *plansources;
 	CachedPlanSource *plansource;
-	Node	   *node;
+	CallStmt   *stmt;
 	FuncExpr   *funcexpr;
 	HeapTuple	func_tuple;
-	List	   *funcargs;
 	Oid		   *argtypes;
 	char	  **argnames;
 	char	   *argmodes;
+	int			numargs;
 	MemoryContext oldcontext;
 	PLpgSQL_row *row;
 	int			nfields;
 	int			i;
-	ListCell   *lc;
 
 	/* Use eval_mcontext for any cruft accumulated here */
 	oldcontext = MemoryContextSwitchTo(get_eval_mcontext(estate));
@@ -2271,11 +2269,12 @@ make_callstmt_target(PLpgSQL_execstate *estate, PLpgSQL_expr *expr)
 	plansource = (CachedPlanSource *) linitial(plansources);
 	if (list_length(plansource->query_list) != 1)
 		elog(ERROR, "query for CALL statement is not a CallStmt");
-	node = linitial_node(Query, plansource->query_list)->utilityStmt;
-	if (node == NULL || !IsA(node, CallStmt))
+	stmt = (CallStmt *) linitial_node(Query,
+									  plansource->query_list)->utilityStmt;
+	if (stmt == NULL || !IsA(stmt, CallStmt))
 		elog(ERROR, "query for CALL statement is not a CallStmt");
 
-	funcexpr = ((CallStmt *) node)->funcexpr;
+	funcexpr = stmt->funcexpr;
 
 	func_tuple = SearchSysCache1(PROCOID,
 								 ObjectIdGetDatum(funcexpr->funcid));
@@ -2284,16 +2283,10 @@ make_callstmt_target(PLpgSQL_execstate *estate, PLpgSQL_expr *expr)
 			 funcexpr->funcid);
 
 	/*
-	 * Extract function arguments, and expand any named-arg notation
+	 * Get the argument names and modes, so that we can deliver on-point error
+	 * messages when something is wrong.
 	 */
-	funcargs = expand_function_arguments(funcexpr->args,
-										 funcexpr->funcresulttype,
-										 func_tuple);
-
-	/*
-	 * Get the argument names and modes, too
-	 */
-	get_func_arg_info(func_tuple, &argtypes, &argnames, &argmodes);
+	numargs = get_func_arg_info(func_tuple, &argtypes, &argnames, &argmodes);
 
 	ReleaseSysCache(func_tuple);
 
@@ -2307,7 +2300,7 @@ make_callstmt_target(PLpgSQL_execstate *estate, PLpgSQL_expr *expr)
 	row->dtype = PLPGSQL_DTYPE_ROW;
 	row->refname = "(unnamed row)";
 	row->lineno = -1;
-	row->varnos = (int *) palloc(sizeof(int) * list_length(funcargs));
+	row->varnos = (int *) palloc(numargs * sizeof(int));
 
 	MemoryContextSwitchTo(get_eval_mcontext(estate));
 
@@ -2317,15 +2310,14 @@ make_callstmt_target(PLpgSQL_execstate *estate, PLpgSQL_expr *expr)
 	 * Datum.
 	 */
 	nfields = 0;
-	i = 0;
-	foreach(lc, funcargs)
+	for (i = 0; i < numargs; i++)
 	{
-		Node	   *n = lfirst(lc);
-
 		if (argmodes &&
 			(argmodes[i] == PROARGMODE_INOUT ||
 			 argmodes[i] == PROARGMODE_OUT))
 		{
+			Node	   *n = list_nth(stmt->outargs, nfields);
+
 			if (IsA(n, Param))
 			{
 				Param	   *param = (Param *) n;
@@ -2348,8 +2340,9 @@ make_callstmt_target(PLpgSQL_execstate *estate, PLpgSQL_expr *expr)
 									i + 1)));
 			}
 		}
-		i++;
 	}
+
+	Assert(nfields == list_length(stmt->outargs));
 
 	row->nfields = nfields;
 
@@ -4098,6 +4091,22 @@ exec_eval_cleanup(PLpgSQL_execstate *estate)
 
 /* ----------
  * Generate a prepared plan
+ *
+ * CAUTION: it is possible for this function to throw an error after it has
+ * built a SPIPlan and saved it in expr->plan.  Therefore, be wary of doing
+ * additional things contingent on expr->plan being NULL.  That is, given
+ * code like
+ *
+ *	if (query->plan == NULL)
+ *	{
+ *		// okay to put setup code here
+ *		exec_prepare_plan(estate, query, ...);
+ *		// NOT okay to put more logic here
+ *	}
+ *
+ * extra steps at the end are unsafe because they will not be executed when
+ * re-executing the calling statement, if exec_prepare_plan failed the first
+ * time.  This is annoyingly error-prone, but the alternatives are worse.
  * ----------
  */
 static void
@@ -4161,10 +4170,12 @@ exec_stmt_execsql(PLpgSQL_execstate *estate,
 	 * whether the statement is INSERT/UPDATE/DELETE
 	 */
 	if (expr->plan == NULL)
+		exec_prepare_plan(estate, expr, CURSOR_OPT_PARALLEL_OK);
+
+	if (!stmt->mod_stmt_set)
 	{
 		ListCell   *l;
 
-		exec_prepare_plan(estate, expr, CURSOR_OPT_PARALLEL_OK);
 		stmt->mod_stmt = false;
 		foreach(l, SPI_plan_get_plan_sources(expr->plan))
 		{
@@ -4184,6 +4195,7 @@ exec_stmt_execsql(PLpgSQL_execstate *estate,
 				break;
 			}
 		}
+		stmt->mod_stmt_set = true;
 	}
 
 	/*
@@ -4561,7 +4573,7 @@ exec_stmt_dynfors(PLpgSQL_execstate *estate, PLpgSQL_stmt_dynfors *stmt)
 	int			rc;
 
 	portal = exec_dynquery_with_params(estate, stmt->query, stmt->params,
-									   NULL, 0);
+									   NULL, CURSOR_OPT_NO_SCROLL);
 
 	/*
 	 * Execute the loop
@@ -5694,14 +5706,21 @@ exec_run_select(PLpgSQL_execstate *estate,
 	 * On the first call for this expression generate the plan.
 	 *
 	 * If we don't need to return a portal, then we're just going to execute
-	 * the query once, which means it's OK to use a parallel plan, even if the
-	 * number of rows being fetched is limited.  If we do need to return a
-	 * portal, the caller might do cursor operations, which parallel query
-	 * can't support.
+	 * the query immediately, which means it's OK to use a parallel plan, even
+	 * if the number of rows being fetched is limited.  If we do need to
+	 * return a portal (i.e., this is for a FOR loop), the user's code might
+	 * invoke additional operations inside the FOR loop, making parallel query
+	 * unsafe.  In any case, we don't expect any cursor operations to be done,
+	 * so specify NO_SCROLL for efficiency and semantic safety.
 	 */
 	if (expr->plan == NULL)
-		exec_prepare_plan(estate, expr,
-						  portalP == NULL ? CURSOR_OPT_PARALLEL_OK : 0);
+	{
+		int			cursorOptions = CURSOR_OPT_NO_SCROLL;
+
+		if (portalP == NULL)
+			cursorOptions |= CURSOR_OPT_PARALLEL_OK;
+		exec_prepare_plan(estate, expr, cursorOptions);
+	}
 
 	/*
 	 * Set up ParamListInfo to pass to executor
@@ -5956,6 +5975,15 @@ exec_eval_simple_expr(PLpgSQL_execstate *estate,
 	if (unlikely(expr->expr_simple_in_use) &&
 		expr->expr_simple_lxid == curlxid)
 		return false;
+
+	/*
+	 * Ensure that there's a portal-level snapshot, in case this simple
+	 * expression is the first thing evaluated after a COMMIT or ROLLBACK.
+	 * We'd have to do this anyway before executing the expression, so we
+	 * might as well do it now to ensure that any possible replanning doesn't
+	 * need to take a new snapshot.
+	 */
+	EnsurePortalSnapshotExists();
 
 	/*
 	 * Check to see if the cached plan has been invalidated.  If not, and this
@@ -7835,6 +7863,10 @@ get_cast_hashentry(PLpgSQL_execstate *estate,
  * exec_simple_check_plan -		Check if a plan is simple enough to
  *								be evaluated by ExecEvalExpr() instead
  *								of SPI.
+ *
+ * Note: the refcount manipulations in this function assume that expr->plan
+ * is a "saved" SPI plan.  That's a bit annoying from the caller's standpoint,
+ * but it's otherwise difficult to avoid leaking the plan on failure.
  * ----------
  */
 static void
@@ -7918,7 +7950,8 @@ exec_simple_check_plan(PLpgSQL_execstate *estate, PLpgSQL_expr *expr)
 	 * OK, we can treat it as a simple plan.
 	 *
 	 * Get the generic plan for the query.  If replanning is needed, do that
-	 * work in the eval_mcontext.
+	 * work in the eval_mcontext.  (Note that replanning could throw an error,
+	 * in which case the expr is left marked "not simple", which is fine.)
 	 */
 	oldcontext = MemoryContextSwitchTo(get_eval_mcontext(estate));
 	cplan = SPI_plan_get_cached_plan(expr->plan);
@@ -7985,7 +8018,7 @@ exec_save_simple_expr(PLpgSQL_expr *expr, CachedPlan *cplan)
 	{
 		/* Extract the single tlist expression */
 		Assert(list_length(plan->targetlist) == 1);
-		tle_expr = castNode(TargetEntry, linitial(plan->targetlist))->expr;
+		tle_expr = linitial_node(TargetEntry, plan->targetlist)->expr;
 
 		if (IsA(plan, Result))
 		{

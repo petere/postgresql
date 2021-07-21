@@ -182,9 +182,10 @@ typedef struct ReorderBufferDiskChange
 ( \
 	((action) == REORDER_BUFFER_CHANGE_INTERNAL_SPEC_INSERT) \
 )
-#define IsSpecConfirm(action) \
+#define IsSpecConfirmOrAbort(action) \
 ( \
-	((action) == REORDER_BUFFER_CHANGE_INTERNAL_SPEC_CONFIRM) \
+	(((action) == REORDER_BUFFER_CHANGE_INTERNAL_SPEC_CONFIRM) || \
+	((action) == REORDER_BUFFER_CHANGE_INTERNAL_SPEC_ABORT)) \
 )
 #define IsInsertOrUpdate(action) \
 ( \
@@ -443,6 +444,9 @@ ReorderBufferReturnTXN(ReorderBuffer *rb, ReorderBufferTXN *txn)
 		txn->invalidations = NULL;
 	}
 
+	/* Reset the toast hash */
+	ReorderBufferToastReset(rb, txn);
+
 	pfree(txn);
 }
 
@@ -520,6 +524,7 @@ ReorderBufferReturnChange(ReorderBuffer *rb, ReorderBufferChange *change,
 			}
 			break;
 		case REORDER_BUFFER_CHANGE_INTERNAL_SPEC_CONFIRM:
+		case REORDER_BUFFER_CHANGE_INTERNAL_SPEC_ABORT:
 		case REORDER_BUFFER_CHANGE_INTERNAL_COMMAND_ID:
 		case REORDER_BUFFER_CHANGE_INTERNAL_TUPLECID:
 			break;
@@ -727,12 +732,13 @@ ReorderBufferProcessPartialChange(ReorderBuffer *rb, ReorderBufferTXN *txn,
 
 	/*
 	 * Indicate a partial change for speculative inserts.  The change will be
-	 * considered as complete once we get the speculative confirm token.
+	 * considered as complete once we get the speculative confirm or abort
+	 * token.
 	 */
 	if (IsSpecInsert(change->action))
 		toptxn->txn_flags |= RBTXN_HAS_PARTIAL_CHANGE;
 	else if (rbtxn_has_partial_change(toptxn) &&
-			 IsSpecConfirm(change->action))
+			 IsSpecConfirmOrAbort(change->action))
 		toptxn->txn_flags &= ~RBTXN_HAS_PARTIAL_CHANGE;
 
 	/*
@@ -1539,7 +1545,7 @@ ReorderBufferCleanupTXN(ReorderBuffer *rb, ReorderBufferTXN *txn)
  * streaming or decoding them at PREPARE. Keep the remaining info -
  * transactions, tuplecids, invalidations and snapshots.
  *
- * We additionaly remove tuplecids after decoding the transaction at prepare
+ * We additionally remove tuplecids after decoding the transaction at prepare
  * time as we only need to perform invalidation at rollback or commit prepared.
  *
  * 'txn_prepared' indicates that we have decoded the transaction at prepare
@@ -1703,7 +1709,7 @@ ReorderBufferBuildTupleCidHash(ReorderBuffer *rb, ReorderBufferTXN *txn)
 		ent = (ReorderBufferTupleCidEnt *)
 			hash_search(txn->tuplecid_hash,
 						(void *) &key,
-						HASH_ENTER | HASH_FIND,
+						HASH_ENTER,
 						&found);
 		if (!found)
 		{
@@ -2211,8 +2217,8 @@ ReorderBufferProcessTXN(ReorderBuffer *rb, ReorderBufferTXN *txn,
 			change_done:
 
 					/*
-					 * Either speculative insertion was confirmed, or it was
-					 * unsuccessful and the record isn't needed anymore.
+					 * If speculative insertion was confirmed, the record
+					 * isn't needed anymore.
 					 */
 					if (specinsert != NULL)
 					{
@@ -2252,6 +2258,32 @@ ReorderBufferProcessTXN(ReorderBuffer *rb, ReorderBufferTXN *txn,
 					/* and memorize the pending insertion */
 					dlist_delete(&change->node);
 					specinsert = change;
+					break;
+
+				case REORDER_BUFFER_CHANGE_INTERNAL_SPEC_ABORT:
+
+					/*
+					 * Abort for speculative insertion arrived. So cleanup the
+					 * specinsert tuple and toast hash.
+					 *
+					 * Note that we get the spec abort change for each toast
+					 * entry but we need to perform the cleanup only the first
+					 * time we get it for the main table.
+					 */
+					if (specinsert != NULL)
+					{
+						/*
+						 * We must clean the toast hash before processing a
+						 * completely new tuple to avoid confusion about the
+						 * previous tuple's toast chunks.
+						 */
+						Assert(change->data.tp.clear_toast_afterwards);
+						ReorderBufferToastReset(rb, txn);
+
+						/* We don't need this record anymore. */
+						ReorderBufferReturnChange(rb, specinsert, true);
+						specinsert = NULL;
+					}
 					break;
 
 				case REORDER_BUFFER_CHANGE_TRUNCATE:
@@ -2360,16 +2392,8 @@ ReorderBufferProcessTXN(ReorderBuffer *rb, ReorderBufferTXN *txn,
 			}
 		}
 
-		/*
-		 * There's a speculative insertion remaining, just clean in up, it
-		 * can't have been successful, otherwise we'd gotten a confirmation
-		 * record.
-		 */
-		if (specinsert)
-		{
-			ReorderBufferReturnChange(rb, specinsert, true);
-			specinsert = NULL;
-		}
+		/* speculative insertion record must be freed by now */
+		Assert(!specinsert);
 
 		/* clean up the iterator */
 		ReorderBufferIterTXNFinish(rb, iterstate);
@@ -2552,7 +2576,7 @@ ReorderBufferReplay(ReorderBufferTXN *txn,
 
 	txn->final_lsn = commit_lsn;
 	txn->end_lsn = end_lsn;
-	txn->commit_time = commit_time;
+	txn->xact_time.commit_time = commit_time;
 	txn->origin_id = origin_id;
 	txn->origin_lsn = origin_lsn;
 
@@ -2643,7 +2667,7 @@ ReorderBufferRememberPrepareInfo(ReorderBuffer *rb, TransactionId xid,
 	 */
 	txn->final_lsn = prepare_lsn;
 	txn->end_lsn = end_lsn;
-	txn->commit_time = prepare_time;
+	txn->xact_time.prepare_time = prepare_time;
 	txn->origin_id = origin_id;
 	txn->origin_lsn = origin_lsn;
 
@@ -2690,7 +2714,7 @@ ReorderBufferPrepare(ReorderBuffer *rb, TransactionId xid,
 	Assert(txn->final_lsn != InvalidXLogRecPtr);
 
 	ReorderBufferReplay(txn, rb, xid, txn->final_lsn, txn->end_lsn,
-						txn->commit_time, txn->origin_id, txn->origin_lsn);
+						txn->xact_time.prepare_time, txn->origin_id, txn->origin_lsn);
 
 	/*
 	 * We send the prepare for the concurrently aborted xacts so that later
@@ -2710,7 +2734,7 @@ ReorderBufferPrepare(ReorderBuffer *rb, TransactionId xid,
 void
 ReorderBufferFinishPrepared(ReorderBuffer *rb, TransactionId xid,
 							XLogRecPtr commit_lsn, XLogRecPtr end_lsn,
-							XLogRecPtr initial_consistent_point,
+							XLogRecPtr two_phase_at,
 							TimestampTz commit_time, RepOriginId origin_id,
 							XLogRecPtr origin_lsn, char *gid, bool is_commit)
 {
@@ -2729,19 +2753,20 @@ ReorderBufferFinishPrepared(ReorderBuffer *rb, TransactionId xid,
 	 * be later used for rollback.
 	 */
 	prepare_end_lsn = txn->end_lsn;
-	prepare_time = txn->commit_time;
+	prepare_time = txn->xact_time.prepare_time;
 
 	/* add the gid in the txn */
 	txn->gid = pstrdup(gid);
 
 	/*
 	 * It is possible that this transaction is not decoded at prepare time
-	 * either because by that time we didn't have a consistent snapshot or it
-	 * was decoded earlier but we have restarted. We only need to send the
-	 * prepare if it was not decoded earlier. We don't need to decode the xact
-	 * for aborts if it is not done already.
+	 * either because by that time we didn't have a consistent snapshot, or
+	 * two_phase was not enabled, or it was decoded earlier but we have
+	 * restarted. We only need to send the prepare if it was not decoded
+	 * earlier. We don't need to decode the xact for aborts if it is not done
+	 * already.
 	 */
-	if ((txn->final_lsn < initial_consistent_point) && is_commit)
+	if ((txn->final_lsn < two_phase_at) && is_commit)
 	{
 		txn->txn_flags |= RBTXN_PREPARE;
 
@@ -2759,12 +2784,12 @@ ReorderBufferFinishPrepared(ReorderBuffer *rb, TransactionId xid,
 		 * prepared after the restart.
 		 */
 		ReorderBufferReplay(txn, rb, xid, txn->final_lsn, txn->end_lsn,
-							txn->commit_time, txn->origin_id, txn->origin_lsn);
+							txn->xact_time.prepare_time, txn->origin_id, txn->origin_lsn);
 	}
 
 	txn->final_lsn = commit_lsn;
 	txn->end_lsn = end_lsn;
-	txn->commit_time = commit_time;
+	txn->xact_time.commit_time = commit_time;
 	txn->origin_id = origin_id;
 	txn->origin_lsn = origin_lsn;
 
@@ -3754,6 +3779,7 @@ ReorderBufferSerializeChange(ReorderBuffer *rb, ReorderBufferTXN *txn,
 				break;
 			}
 		case REORDER_BUFFER_CHANGE_INTERNAL_SPEC_CONFIRM:
+		case REORDER_BUFFER_CHANGE_INTERNAL_SPEC_ABORT:
 		case REORDER_BUFFER_CHANGE_INTERNAL_COMMAND_ID:
 		case REORDER_BUFFER_CHANGE_INTERNAL_TUPLECID:
 			/* ReorderBufferChange contains everything important */
@@ -4017,6 +4043,7 @@ ReorderBufferChangeSize(ReorderBufferChange *change)
 				break;
 			}
 		case REORDER_BUFFER_CHANGE_INTERNAL_SPEC_CONFIRM:
+		case REORDER_BUFFER_CHANGE_INTERNAL_SPEC_ABORT:
 		case REORDER_BUFFER_CHANGE_INTERNAL_COMMAND_ID:
 		case REORDER_BUFFER_CHANGE_INTERNAL_TUPLECID:
 			/* ReorderBufferChange contains everything important */
@@ -4315,6 +4342,7 @@ ReorderBufferRestoreChange(ReorderBuffer *rb, ReorderBufferTXN *txn,
 				break;
 			}
 		case REORDER_BUFFER_CHANGE_INTERNAL_SPEC_CONFIRM:
+		case REORDER_BUFFER_CHANGE_INTERNAL_SPEC_ABORT:
 		case REORDER_BUFFER_CHANGE_INTERNAL_COMMAND_ID:
 		case REORDER_BUFFER_CHANGE_INTERNAL_TUPLECID:
 			break;

@@ -417,6 +417,12 @@ _equalScalarArrayOpExpr(const ScalarArrayOpExpr *a, const ScalarArrayOpExpr *b)
 		b->hashfuncid != 0)
 		return false;
 
+	/* Likewise for the negfuncid */
+	if (a->negfuncid != b->negfuncid &&
+		a->negfuncid != 0 &&
+		b->negfuncid != 0)
+		return false;
+
 	COMPARE_SCALAR_FIELD(useOr);
 	COMPARE_SCALAR_FIELD(inputcollid);
 	COMPARE_NODE_FIELD(args);
@@ -1187,6 +1193,7 @@ _equalObjectWithArgs(const ObjectWithArgs *a, const ObjectWithArgs *b)
 {
 	COMPARE_NODE_FIELD(objname);
 	COMPARE_NODE_FIELD(objargs);
+	COMPARE_NODE_FIELD(objfuncargs);
 	COMPARE_SCALAR_FIELD(args_unspecified);
 
 	return true;
@@ -1246,6 +1253,7 @@ _equalCallStmt(const CallStmt *a, const CallStmt *b)
 {
 	COMPARE_NODE_FIELD(funccall);
 	COMPARE_NODE_FIELD(funcexpr);
+	COMPARE_NODE_FIELD(outargs);
 
 	return true;
 }

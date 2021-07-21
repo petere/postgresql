@@ -3538,10 +3538,12 @@ _printTocEntry(ArchiveHandle *AH, TocEntry *te, bool isData)
 	 * Actually print the definition.
 	 *
 	 * Really crude hack for suppressing AUTHORIZATION clause that old pg_dump
-	 * versions put into CREATE SCHEMA.  We have to do this when --no-owner
-	 * mode is selected.  This is ugly, but I see no other good way ...
+	 * versions put into CREATE SCHEMA.  Don't mutate the variant for schema
+	 * "public" that is a comment.  We have to do this when --no-owner mode is
+	 * selected.  This is ugly, but I see no other good way ...
 	 */
-	if (ropt->noOwner && strcmp(te->desc, "SCHEMA") == 0)
+	if (ropt->noOwner &&
+		strcmp(te->desc, "SCHEMA") == 0 && strncmp(te->defn, "--", 2) != 0)
 	{
 		ahprintf(AH, "CREATE SCHEMA %s;\n\n\n", fmtId(te->tag));
 	}
@@ -3553,11 +3555,16 @@ _printTocEntry(ArchiveHandle *AH, TocEntry *te, bool isData)
 
 	/*
 	 * If we aren't using SET SESSION AUTH to determine ownership, we must
-	 * instead issue an ALTER OWNER command.  We assume that anything without
-	 * a DROP command is not a separately ownable object.  All the categories
-	 * with DROP commands must appear in one list or the other.
+	 * instead issue an ALTER OWNER command.  Schema "public" is special; when
+	 * a dump emits a comment in lieu of creating it, we use ALTER OWNER even
+	 * when using SET SESSION for all other objects.  We assume that anything
+	 * without a DROP command is not a separately ownable object.  All the
+	 * categories with DROP commands must appear in one list or the other.
 	 */
-	if (!ropt->noOwner && !ropt->use_setsessauth &&
+	if (!ropt->noOwner &&
+		(!ropt->use_setsessauth ||
+		 (strcmp(te->desc, "SCHEMA") == 0 &&
+		  strncmp(te->defn, "--", 2) == 0)) &&
 		te->owner && strlen(te->owner) > 0 &&
 		te->dropStmt && strlen(te->dropStmt) > 0)
 	{
@@ -3703,7 +3710,6 @@ ReadHead(ArchiveHandle *AH)
 				vmin,
 				vrev;
 	int			fmt;
-	struct tm	crtm;
 
 	/*
 	 * If we haven't already read the header, do so.
@@ -3771,6 +3777,8 @@ ReadHead(ArchiveHandle *AH)
 
 	if (AH->version >= K_VERS_1_4)
 	{
+		struct tm	crtm;
+
 		crtm.tm_sec = ReadInt(AH);
 		crtm.tm_min = ReadInt(AH);
 		crtm.tm_hour = ReadInt(AH);
@@ -3779,12 +3787,32 @@ ReadHead(ArchiveHandle *AH)
 		crtm.tm_year = ReadInt(AH);
 		crtm.tm_isdst = ReadInt(AH);
 
-		AH->archdbname = ReadStr(AH);
-
+		/*
+		 * Newer versions of glibc have mktime() report failure if tm_isdst is
+		 * inconsistent with the prevailing timezone, e.g. tm_isdst = 1 when
+		 * TZ=UTC.  This is problematic when restoring an archive under a
+		 * different timezone setting.  If we get a failure, try again with
+		 * tm_isdst set to -1 ("don't know").
+		 *
+		 * XXX with or without this hack, we reconstruct createDate
+		 * incorrectly when the prevailing timezone is different from
+		 * pg_dump's.  Next time we bump the archive version, we should flush
+		 * this representation and store a plain seconds-since-the-Epoch
+		 * timestamp instead.
+		 */
 		AH->createDate = mktime(&crtm);
-
 		if (AH->createDate == (time_t) -1)
-			pg_log_warning("invalid creation date in header");
+		{
+			crtm.tm_isdst = -1;
+			AH->createDate = mktime(&crtm);
+			if (AH->createDate == (time_t) -1)
+				pg_log_warning("invalid creation date in header");
+		}
+	}
+
+	if (AH->version >= K_VERS_1_4)
+	{
+		AH->archdbname = ReadStr(AH);
 	}
 
 	if (AH->version >= K_VERS_1_10)
