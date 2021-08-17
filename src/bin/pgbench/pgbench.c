@@ -63,6 +63,7 @@
 #include "common/username.h"
 #include "fe_utils/cancel.h"
 #include "fe_utils/conditional.h"
+#include "fe_utils/option_utils.h"
 #include "fe_utils/string_utils.h"
 #include "getopt_long.h"
 #include "libpq-fe.h"
@@ -3460,7 +3461,14 @@ advanceConnectionState(TState *thread, CState *st, StatsData *agg)
 				 */
 			case CSTATE_WAIT_RESULT:
 				pg_log_debug("client %d receiving", st->id);
-				if (!PQconsumeInput(st->con))
+
+				/*
+				 * Only check for new network data if we processed all data
+				 * fetched prior. Otherwise we end up doing a syscall for each
+				 * individual pipelined query, which has a measurable
+				 * performance impact.
+				 */
+				if (PQisBusy(st->con) && !PQconsumeInput(st->con))
 				{
 					/* there's something wrong */
 					commandFailed(st, "SQL", "perhaps the backend died while processing");
@@ -5887,10 +5895,9 @@ main(int argc, char **argv)
 				break;
 			case 'c':
 				benchmarking_option_set = true;
-				nclients = atoi(optarg);
-				if (nclients <= 0)
+				if (!option_parse_int(optarg, "-c/--clients", 1, INT_MAX,
+									  &nclients))
 				{
-					pg_log_fatal("invalid number of clients: \"%s\"", optarg);
 					exit(1);
 				}
 #ifdef HAVE_GETRLIMIT
@@ -5914,10 +5921,9 @@ main(int argc, char **argv)
 				break;
 			case 'j':			/* jobs */
 				benchmarking_option_set = true;
-				nthreads = atoi(optarg);
-				if (nthreads <= 0)
+				if (!option_parse_int(optarg, "-j/--jobs", 1, INT_MAX,
+									  &nthreads))
 				{
-					pg_log_fatal("invalid number of threads: \"%s\"", optarg);
 					exit(1);
 				}
 #ifndef ENABLE_THREAD_SAFETY
@@ -5938,30 +5944,21 @@ main(int argc, char **argv)
 				break;
 			case 's':
 				scale_given = true;
-				scale = atoi(optarg);
-				if (scale <= 0)
-				{
-					pg_log_fatal("invalid scaling factor: \"%s\"", optarg);
+				if (!option_parse_int(optarg, "-s/--scale", 1, INT_MAX,
+									  &scale))
 					exit(1);
-				}
 				break;
 			case 't':
 				benchmarking_option_set = true;
-				nxacts = atoi(optarg);
-				if (nxacts <= 0)
-				{
-					pg_log_fatal("invalid number of transactions: \"%s\"", optarg);
+				if (!option_parse_int(optarg, "-t/--transactions", 1, INT_MAX,
+									  &nxacts))
 					exit(1);
-				}
 				break;
 			case 'T':
 				benchmarking_option_set = true;
-				duration = atoi(optarg);
-				if (duration <= 0)
-				{
-					pg_log_fatal("invalid duration: \"%s\"", optarg);
+				if (!option_parse_int(optarg, "-T/--time", 1, INT_MAX,
+									  &duration))
 					exit(1);
-				}
 				break;
 			case 'U':
 				username = pg_strdup(optarg);
@@ -6019,12 +6016,9 @@ main(int argc, char **argv)
 				break;
 			case 'F':
 				initialization_option_set = true;
-				fillfactor = atoi(optarg);
-				if (fillfactor < 10 || fillfactor > 100)
-				{
-					pg_log_fatal("invalid fillfactor: \"%s\"", optarg);
+				if (!option_parse_int(optarg, "-F/--fillfactor", 10, 100,
+									  &fillfactor))
 					exit(1);
-				}
 				break;
 			case 'M':
 				benchmarking_option_set = true;
@@ -6039,12 +6033,9 @@ main(int argc, char **argv)
 				break;
 			case 'P':
 				benchmarking_option_set = true;
-				progress = atoi(optarg);
-				if (progress <= 0)
-				{
-					pg_log_fatal("invalid thread progress delay: \"%s\"", optarg);
+				if (!option_parse_int(optarg, "-P/--progress", 1, INT_MAX,
+									  &progress))
 					exit(1);
-				}
 				break;
 			case 'R':
 				{
@@ -6098,12 +6089,9 @@ main(int argc, char **argv)
 				break;
 			case 5:				/* aggregate-interval */
 				benchmarking_option_set = true;
-				agg_interval = atoi(optarg);
-				if (agg_interval <= 0)
-				{
-					pg_log_fatal("invalid number of seconds for aggregation: \"%s\"", optarg);
+				if (!option_parse_int(optarg, "--aggregate-interval", 1, INT_MAX,
+									  &agg_interval))
 					exit(1);
-				}
 				break;
 			case 6:				/* progress-timestamp */
 				progress_timestamp = true;
@@ -6135,12 +6123,9 @@ main(int argc, char **argv)
 				break;
 			case 11:			/* partitions */
 				initialization_option_set = true;
-				partitions = atoi(optarg);
-				if (partitions < 0)
-				{
-					pg_log_fatal("invalid number of partitions: \"%s\"", optarg);
+				if (!option_parse_int(optarg, "--partitions", 1, INT_MAX,
+									  &partitions))
 					exit(1);
-				}
 				break;
 			case 12:			/* partition-method */
 				initialization_option_set = true;
@@ -6491,7 +6476,10 @@ main(int argc, char **argv)
 
 	errno = THREAD_BARRIER_INIT(&barrier, nthreads);
 	if (errno != 0)
+	{
 		pg_log_fatal("could not initialize barrier: %m");
+		exit(1);
+	}
 
 #ifdef ENABLE_THREAD_SAFETY
 	/* start all threads but thread 0 which is executed directly later */

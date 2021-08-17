@@ -95,7 +95,6 @@
 
 #include "access/transam.h"
 #include "access/xlog.h"
-#include "bootstrap/bootstrap.h"
 #include "catalog/pg_control.h"
 #include "common/file_perm.h"
 #include "common/ip.h"
@@ -109,6 +108,7 @@
 #include "pgstat.h"
 #include "port/pg_bswap.h"
 #include "postmaster/autovacuum.h"
+#include "postmaster/auxprocess.h"
 #include "postmaster/bgworker_internals.h"
 #include "postmaster/fork_process.h"
 #include "postmaster/interrupt.h"
@@ -592,6 +592,13 @@ PostmasterMain(int argc, char *argv[])
 	PostmasterPid = MyProcPid;
 
 	IsPostmasterEnvironment = true;
+
+	/*
+	 * Start our win32 signal implementation
+	 */
+#ifdef WIN32
+	pgwin32_signal_initialize();
+#endif
 
 	/*
 	 * We should not be creating any files or directories before we check the
@@ -1403,6 +1410,12 @@ PostmasterMain(int argc, char *argv[])
 	 */
 	AddToDataDirLockFile(LOCK_FILE_LINE_PM_STATUS, PM_STATUS_STARTING);
 
+	/* Start bgwriter and checkpointer so they can help with recovery */
+	if (CheckpointerPID == 0)
+		CheckpointerPID = StartCheckpointer();
+	if (BgWriterPID == 0)
+		BgWriterPID = StartBackgroundWriter();
+
 	/*
 	 * We're ready to rock and roll...
 	 */
@@ -1765,7 +1778,7 @@ ServerLoop(void)
 		 * fails, we'll just try again later.  Likewise for the checkpointer.
 		 */
 		if (pmState == PM_RUN || pmState == PM_RECOVERY ||
-			pmState == PM_HOT_STANDBY)
+			pmState == PM_HOT_STANDBY || pmState == PM_STARTUP)
 		{
 			if (CheckpointerPID == 0)
 				CheckpointerPID = StartCheckpointer();
@@ -3289,26 +3302,21 @@ CleanupBackgroundWorker(int pid,
 		}
 
 		/*
-		 * Additionally, for shared-memory-connected workers, just like a
-		 * backend, any exit status other than 0 or 1 is considered a crash
-		 * and causes a system-wide restart.
+		 * Additionally, just like a backend, any exit status other than 0 or
+		 * 1 is considered a crash and causes a system-wide restart.
 		 */
-		if ((rw->rw_worker.bgw_flags & BGWORKER_SHMEM_ACCESS) != 0)
+		if (!EXIT_STATUS_0(exitstatus) && !EXIT_STATUS_1(exitstatus))
 		{
-			if (!EXIT_STATUS_0(exitstatus) && !EXIT_STATUS_1(exitstatus))
-			{
-				HandleChildCrash(pid, exitstatus, namebuf);
-				return true;
-			}
+			HandleChildCrash(pid, exitstatus, namebuf);
+			return true;
 		}
 
 		/*
-		 * We must release the postmaster child slot whether this worker is
-		 * connected to shared memory or not, but we only treat it as a crash
-		 * if it is in fact connected.
+		 * We must release the postmaster child slot. If the worker failed to
+		 * do so, it did not clean up after itself, requiring a crash-restart
+		 * cycle.
 		 */
-		if (!ReleasePostmasterChildSlot(rw->rw_child_slot) &&
-			(rw->rw_worker.bgw_flags & BGWORKER_SHMEM_ACCESS) != 0)
+		if (!ReleasePostmasterChildSlot(rw->rw_child_slot))
 		{
 			HandleChildCrash(pid, exitstatus, namebuf);
 			return true;
@@ -4899,15 +4907,6 @@ SubPostmasterMain(int argc, char *argv[])
 	/* Close the postmaster's sockets (as soon as we know them) */
 	ClosePostmasterPorts(strcmp(argv[1], "--forklog") == 0);
 
-	/*
-	 * Start our win32 signal implementation. This has to be done after we
-	 * read the backend variables, because we need to pick up the signal pipe
-	 * from the parent process.
-	 */
-#ifdef WIN32
-	pgwin32_signal_initialize();
-#endif
-
 	/* Setup as postmaster child */
 	InitPostmasterChild();
 
@@ -4930,7 +4929,7 @@ SubPostmasterMain(int argc, char *argv[])
 	if (strcmp(argv[1], "--forkbackend") == 0 ||
 		strcmp(argv[1], "--forkavlauncher") == 0 ||
 		strcmp(argv[1], "--forkavworker") == 0 ||
-		strcmp(argv[1], "--forkboot") == 0 ||
+		strcmp(argv[1], "--forkaux") == 0 ||
 		strncmp(argv[1], "--forkbgworker=", 15) == 0)
 		PGSharedMemoryReAttach();
 	else
@@ -5018,8 +5017,12 @@ SubPostmasterMain(int argc, char *argv[])
 		/* And run the backend */
 		BackendRun(&port);		/* does not return */
 	}
-	if (strcmp(argv[1], "--forkboot") == 0)
+	if (strcmp(argv[1], "--forkaux") == 0)
 	{
+		AuxProcType auxtype;
+
+		Assert(argc == 4);
+
 		/* Restore basic shared memory pointers */
 		InitShmemAccess(UsedShmemSegAddr);
 
@@ -5029,7 +5032,8 @@ SubPostmasterMain(int argc, char *argv[])
 		/* Attach process to shared data structures */
 		CreateSharedMemoryAndSemaphores();
 
-		AuxiliaryProcessMain(argc - 2, argv + 2);	/* does not return */
+		auxtype = atoi(argv[3]);
+		AuxiliaryProcessMain(auxtype);	/* does not return */
 	}
 	if (strcmp(argv[1], "--forkavlauncher") == 0)
 	{
@@ -5160,15 +5164,6 @@ sigusr1_handler(SIGNAL_ARGS)
 		/* WAL redo has started. We're out of reinitialization. */
 		FatalError = false;
 		AbortStartTime = 0;
-
-		/*
-		 * Crank up the background tasks.  It doesn't matter if this fails,
-		 * we'll just try again later.
-		 */
-		Assert(CheckpointerPID == 0);
-		CheckpointerPID = StartCheckpointer();
-		Assert(BgWriterPID == 0);
-		BgWriterPID = StartBackgroundWriter();
 
 		/*
 		 * Start the archiver if we're responsible for (re-)archiving received
@@ -5417,28 +5412,28 @@ static pid_t
 StartChildProcess(AuxProcType type)
 {
 	pid_t		pid;
-	char	   *av[10];
-	int			ac = 0;
-	char		typebuf[32];
-
-	/*
-	 * Set up command-line arguments for subprocess
-	 */
-	av[ac++] = "postgres";
 
 #ifdef EXEC_BACKEND
-	av[ac++] = "--forkboot";
-	av[ac++] = NULL;			/* filled in by postmaster_forkexec */
-#endif
+	{
+		char	   *av[10];
+		int			ac = 0;
+		char		typebuf[32];
 
-	snprintf(typebuf, sizeof(typebuf), "-x%d", type);
-	av[ac++] = typebuf;
+		/*
+		 * Set up command-line arguments for subprocess
+		 */
+		av[ac++] = "postgres";
+		av[ac++] = "--forkaux";
+		av[ac++] = NULL;		/* filled in by postmaster_forkexec */
 
-	av[ac] = NULL;
-	Assert(ac < lengthof(av));
+		snprintf(typebuf, sizeof(typebuf), "%d", type);
+		av[ac++] = typebuf;
 
-#ifdef EXEC_BACKEND
-	pid = postmaster_forkexec(ac, av);
+		av[ac] = NULL;
+		Assert(ac < lengthof(av));
+
+		pid = postmaster_forkexec(ac, av);
+	}
 #else							/* !EXEC_BACKEND */
 	pid = fork_process();
 
@@ -5454,7 +5449,7 @@ StartChildProcess(AuxProcType type)
 		MemoryContextDelete(PostmasterContext);
 		PostmasterContext = NULL;
 
-		AuxiliaryProcessMain(ac, av);	/* does not return */
+		AuxiliaryProcessMain(type); /* does not return */
 	}
 #endif							/* EXEC_BACKEND */
 

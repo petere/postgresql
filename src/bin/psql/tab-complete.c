@@ -2141,8 +2141,15 @@ psql_completion(const char *text, int start, int end)
 	}
 	/* If we have ALTER TABLE <sth> SET, provide list of attributes and '(' */
 	else if (Matches("ALTER", "TABLE", MatchAny, "SET"))
-		COMPLETE_WITH("(", "LOGGED", "SCHEMA", "TABLESPACE", "UNLOGGED",
-					  "WITH", "WITHOUT");
+		COMPLETE_WITH("(", "ACCESS METHOD", "LOGGED", "SCHEMA",
+					  "TABLESPACE", "UNLOGGED", "WITH", "WITHOUT");
+
+	/*
+	 * If we have ALTER TABLE <sth> SET ACCESS METHOD provide a list of table
+	 * AMs.
+	 */
+	else if (Matches("ALTER", "TABLE", MatchAny, "SET", "ACCESS", "METHOD"))
+		COMPLETE_WITH_QUERY(Query_for_list_of_table_access_methods);
 
 	/*
 	 * If we have ALTER TABLE <sth> SET TABLESPACE provide a list of
@@ -3048,8 +3055,8 @@ psql_completion(const char *text, int start, int end)
 /* DECLARE */
 
 	/*
-	 * Complete DECLARE <name> with one of BINARY, INSENSITIVE, SCROLL, NO
-	 * SCROLL, and CURSOR.
+	 * Complete DECLARE <name> with one of BINARY, ASENSITIVE, INSENSITIVE,
+	 * SCROLL, NO SCROLL, and CURSOR.
 	 */
 	else if (Matches("DECLARE", MatchAny))
 		COMPLETE_WITH("BINARY", "ASENSITIVE", "INSENSITIVE", "SCROLL", "NO SCROLL",
@@ -3063,8 +3070,8 @@ psql_completion(const char *text, int start, int end)
 	 * indicates.
 	 */
 	else if (HeadMatches("DECLARE") && TailMatches("BINARY"))
-		COMPLETE_WITH("INSENSITIVE", "SCROLL", "NO SCROLL", "CURSOR");
-	else if (HeadMatches("DECLARE") && TailMatches("INSENSITIVE"))
+		COMPLETE_WITH("ASENSITIVE", "INSENSITIVE", "SCROLL", "NO SCROLL", "CURSOR");
+	else if (HeadMatches("DECLARE") && TailMatches("ASENSITIVE|INSENSITIVE"))
 		COMPLETE_WITH("SCROLL", "NO SCROLL", "CURSOR");
 	else if (HeadMatches("DECLARE") && TailMatches("SCROLL"))
 		COMPLETE_WITH("CURSOR");

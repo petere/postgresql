@@ -2395,6 +2395,7 @@ _outRelOptInfo(StringInfo str, const RelOptInfo *node)
 	WRITE_BOOL_FIELD(consider_partitionwise_join);
 	WRITE_BITMAPSET_FIELD(top_parent_relids);
 	WRITE_BOOL_FIELD(partbounds_merged);
+	WRITE_BITMAPSET_FIELD(live_parts);
 	WRITE_BITMAPSET_FIELD(all_partrels);
 }
 

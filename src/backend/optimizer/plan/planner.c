@@ -3668,7 +3668,7 @@ consider_groupingsets_paths(PlannerInfo *root,
 							double dNumGroups)
 {
 	Query	   *parse = root->parse;
-	int			hash_mem = get_hash_mem();
+	Size		hash_mem_limit = get_hash_memory_limit();
 
 	/*
 	 * If we're not being offered sorted input, then only consider plans that
@@ -3734,7 +3734,7 @@ consider_groupingsets_paths(PlannerInfo *root,
 		 * with.  Override hash_mem in that case; otherwise, we'll rely on the
 		 * sorted-input case to generate usable mixed paths.
 		 */
-		if (hashsize > hash_mem * 1024L && gd->rollups)
+		if (hashsize > hash_mem_limit && gd->rollups)
 			return;				/* nope, won't fit */
 
 		/*
@@ -3853,7 +3853,7 @@ consider_groupingsets_paths(PlannerInfo *root,
 	{
 		List	   *rollups = NIL;
 		List	   *hash_sets = list_copy(gd->unsortable_sets);
-		double		availspace = (hash_mem * 1024.0);
+		double		availspace = hash_mem_limit;
 		ListCell   *lc;
 
 		/*
@@ -6989,19 +6989,22 @@ apply_scanjoin_target_to_paths(PlannerInfo *root,
 	if (rel_is_partitioned)
 	{
 		List	   *live_children = NIL;
-		int			partition_idx;
+		int			i;
 
 		/* Adjust each partition. */
-		for (partition_idx = 0; partition_idx < rel->nparts; partition_idx++)
+		i = -1;
+		while ((i = bms_next_member(rel->live_parts, i)) >= 0)
 		{
-			RelOptInfo *child_rel = rel->part_rels[partition_idx];
+			RelOptInfo *child_rel = rel->part_rels[i];
 			AppendRelInfo **appinfos;
 			int			nappinfos;
 			List	   *child_scanjoin_targets = NIL;
 			ListCell   *lc;
 
-			/* Pruned or dummy children can be ignored. */
-			if (child_rel == NULL || IS_DUMMY_REL(child_rel))
+			Assert(child_rel != NULL);
+
+			/* Dummy children can be ignored. */
+			if (IS_DUMMY_REL(child_rel))
 				continue;
 
 			/* Translate scan/join targets for this child. */
@@ -7082,31 +7085,35 @@ create_partitionwise_grouping_paths(PlannerInfo *root,
 									PartitionwiseAggregateType patype,
 									GroupPathExtraData *extra)
 {
-	int			nparts = input_rel->nparts;
-	int			cnt_parts;
 	List	   *grouped_live_children = NIL;
 	List	   *partially_grouped_live_children = NIL;
 	PathTarget *target = grouped_rel->reltarget;
 	bool		partial_grouping_valid = true;
+	int			i;
 
 	Assert(patype != PARTITIONWISE_AGGREGATE_NONE);
 	Assert(patype != PARTITIONWISE_AGGREGATE_PARTIAL ||
 		   partially_grouped_rel != NULL);
 
 	/* Add paths for partitionwise aggregation/grouping. */
-	for (cnt_parts = 0; cnt_parts < nparts; cnt_parts++)
+	i = -1;
+	while ((i = bms_next_member(input_rel->live_parts, i)) >= 0)
 	{
-		RelOptInfo *child_input_rel = input_rel->part_rels[cnt_parts];
-		PathTarget *child_target = copy_pathtarget(target);
+		RelOptInfo *child_input_rel = input_rel->part_rels[i];
+		PathTarget *child_target;
 		AppendRelInfo **appinfos;
 		int			nappinfos;
 		GroupPathExtraData child_extra;
 		RelOptInfo *child_grouped_rel;
 		RelOptInfo *child_partially_grouped_rel;
 
-		/* Pruned or dummy children can be ignored. */
-		if (child_input_rel == NULL || IS_DUMMY_REL(child_input_rel))
+		Assert(child_input_rel != NULL);
+
+		/* Dummy children can be ignored. */
+		if (IS_DUMMY_REL(child_input_rel))
 			continue;
+
+		child_target = copy_pathtarget(target);
 
 		/*
 		 * Copy the given "extra" structure as is and then override the
