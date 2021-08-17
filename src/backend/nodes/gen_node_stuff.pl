@@ -15,14 +15,19 @@
 use strict;
 use warnings;
 
-use experimental 'smartmatch';
-
 use File::Basename;
 
 use FindBin;
 use lib "$FindBin::RealBin/../catalog";
 
 use Catalog;  # for RenameTempFile
+
+
+sub elem
+{
+	my $x = shift;
+	return grep { $_ eq $x } @_;
+}
 
 
 my @node_types = qw(Node);
@@ -118,7 +123,7 @@ foreach my $infile (@ARGV)
 					$is_node_struct = 1;
 					next;
 				}
-				elsif ($line =~ /\s*(\w+)\s+(\w+);/ && $1 ~~ @node_types)
+				elsif ($line =~ /\s*(\w+)\s+(\w+);/ and elem $1, @node_types)
 				{
 					$is_node_struct = 1;
 					$supertype = $1;
@@ -219,7 +224,7 @@ foreach my $infile (@ARGV)
 				$subline = 0;
 			}
 			# one node type typedef'ed directly from another
-			elsif ($line =~ /^typedef (\w+) (\w+);$/ && $1 ~~ @node_types)
+			elsif ($line =~ /^typedef (\w+) (\w+);$/ and elem $1, @node_types)
 			{
 				my $alias_of = $1;
 				my $n = $2;
@@ -260,7 +265,7 @@ open my $nt, '>', 'nodetags.h' . $tmpext or die $!;
 my $i = 1;
 foreach my $n (@node_types,@extra_tags)
 {
-	next if $n ~~ @abstract_types;
+	next if elem $n, @abstract_types;
 	print $nt "\tT_${n} = $i,\n";
 	$i++;
 }
@@ -279,8 +284,8 @@ my @custom_copy = qw(A_Const Const ExtensibleNode);
 
 foreach my $n (@node_types)
 {
-	next if $n ~~ @abstract_types;
-	next if $n ~~ @no_copy;
+	next if elem $n, @abstract_types;
+	next if elem $n, @no_copy;
 	next if $n eq 'List';
 	next if $n eq 'Value';
 
@@ -294,7 +299,7 @@ foreach my $n (@node_types)
 \t\t\tretval = _equal${n}(a, b);
 \t\t\tbreak;";
 
-	next if $n ~~ @custom_copy;
+	next if elem $n, @custom_copy;
 
 	print $cf "
 static $n *
@@ -333,7 +338,7 @@ _equal${n}(const $n *a, const $n *b)
 			print $cf "\tCOPY_LOCATION_FIELD($f);\n" unless $copy_ignore;
 			print $ef "\tCOMPARE_LOCATION_FIELD($f);\n" unless $equal_ignore;
 		}
-		elsif ($t ~~ @scalar_types || $t ~~ @enum_types)
+		elsif (elem $t, @scalar_types or elem $t, @enum_types)
 		{
 			print $cf "\tCOPY_SCALAR_FIELD($f);\n" unless $copy_ignore;
 			if ($a =~ /\bequal_ignore_if_zero\b/)
@@ -346,14 +351,14 @@ _equal${n}(const $n *a, const $n *b)
 			}
 			$last_array_size_field = "from->$f";
 		}
-		elsif ($t =~ /(\w+)\*/ && $1 ~~ @scalar_types)
+		elsif ($t =~ /(\w+)\*/ and elem $1, @scalar_types)
 		{
 			my $tt = $1;
 			print $cf "\tCOPY_POINTER_FIELD($f, $last_array_size_field * sizeof($tt));\n" unless $copy_ignore;
 			(my $l2 = $last_array_size_field) =~ s/from/a/;
 			print $ef "\tCOMPARE_POINTER_FIELD($f, $l2 * sizeof($tt));\n" unless $equal_ignore;
 		}
-		elsif ($t =~ /(\w+)\*/ && $1 ~~ @node_types)
+		elsif ($t =~ /(\w+)\*/ and elem $1, @node_types)
 		{
 			print $cf "\tCOPY_NODE_FIELD($f);\n" unless $copy_ignore;
 			print $ef "\tCOMPARE_NODE_FIELD($f);\n" unless $equal_ignore;
@@ -417,8 +422,8 @@ my @custom_readwrite = qw(A_Const A_Expr BoolExpr Const Constraint ExtensibleNod
 
 foreach my $n (@node_types)
 {
-	next if $n ~~ @abstract_types;
-	next if $n ~~ @no_read_write;
+	next if elem $n, @abstract_types;
+	next if elem $n, @no_read_write;
 	next if $n eq 'List';
 	next if $n eq 'Value';
 
@@ -426,7 +431,7 @@ foreach my $n (@node_types)
 	if ($n =~ /Stmt$/)
 	{
 		my @keep = qw(AlterStatsStmt CreateForeignTableStmt CreateStatsStmt CreateStmt DeclareCursorStmt ImportForeignSchemaStmt IndexStmt NotifyStmt PlannedStmt PLAssignStmt RawStmt ReturnStmt SelectStmt SetOperationStmt);
-		next unless $n ~~ @keep;
+		next unless elem $n, @keep;
 	}
 
 	# XXX Also skip read support for those that didn't have it before.
@@ -443,7 +448,7 @@ foreach my $n (@node_types)
 	print $rf2 "\telse if (MATCH(\"$N\", " . length($N) . "))\n".
 	  "\t\treturn_value = _read${n}();\n" unless $no_read;
 
-	next if $n ~~ @custom_readwrite;
+	next if elem $n, @custom_readwrite;
 
 	print $of "
 static void
@@ -555,12 +560,12 @@ _read${n}(void)
 			print $of "\tWRITE_BITMAPSET_FIELD($f);\n";
 			print $rf "\tREAD_BITMAPSET_FIELD($f);\n" unless $no_read;
 		}
-		elsif ($t ~~ @enum_types)
+		elsif (elem $t, @enum_types)
 		{
 			print $of "\tWRITE_ENUM_FIELD($f, $t);\n";
 			print $rf "\tREAD_ENUM_FIELD($f, $t);\n" unless $no_read;
 		}
-		elsif ($t =~ /(\w+)(\*|\[)/ && $1 ~~ @scalar_types)
+		elsif ($t =~ /(\w+)(\*|\[)/ and elem $1, @scalar_types)
 		{
 			warn "$t $n.$f" unless $last_array_size_field;
 			my $tt = uc $1;
@@ -586,7 +591,7 @@ _read${n}(void)
 			  "\telse\n".
 			  "\t\toutBitmapset(str, NULL);\n";
 		}
-		elsif ($t =~ /(\w+)\*/ && $1 ~~ @node_types)
+		elsif ($t =~ /(\w+)\*/ and elem $1, @node_types)
 		{
 			print $of "\tWRITE_NODE_FIELD($f);\n";
 			print $rf "\tREAD_NODE_FIELD($f);\n" unless $no_read;
