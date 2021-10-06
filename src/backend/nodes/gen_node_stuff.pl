@@ -38,7 +38,7 @@ my @no_read_write;
 
 my @scalar_types = qw(
 	bits32 bool char double int int8 int16 int32 int64 long uint8 uint16 uint32 uint64
-	AclMode AttrNumber Cost Index Oid Selectivity Size StrategyNumber SubTransactionId TimeLineID XLogRecPtr
+	AclMode AttrNumber Cardinality Cost Index Oid Selectivity Size StrategyNumber SubTransactionId TimeLineID XLogRecPtr
 );
 
 my @enum_types;
@@ -46,7 +46,7 @@ my @enum_types;
 # For abstract types we track their fields, so that subtypes can use
 # them, but we don't emit a node tag, so you can't instantiate them.
 my @abstract_types = qw(
-	Node
+	Node Expr
 	BufferHeapTupleTableSlot HeapTupleTableSlot MinimalTupleTableSlot VirtualTupleTableSlot
 	JoinPath
 	MemoryContextData
@@ -54,15 +54,11 @@ my @abstract_types = qw(
 );
 
 # These are additional node tags that don't have their own struct.
-my @extra_tags = qw(IntList OidList Integer Float String BitString Null);
+my @extra_tags = qw(IntList OidList);
 
 # These are regular nodes, but we skip parsing them from their header
 # files since we won't use their internal structure here anyway.
-push @node_types, qw(List Value);
-
-# XXX maybe this should be abstract?
-push @no_copy, qw(Expr);
-push @no_read_write, qw(Expr);
+push @node_types, qw(List);
 
 # pathnodes.h exceptions
 push @no_copy, qw(
@@ -287,7 +283,6 @@ foreach my $n (@node_types)
 	next if elem $n, @abstract_types;
 	next if elem $n, @no_copy;
 	next if $n eq 'List';
-	next if $n eq 'Value';
 
 	print $cf2 "
 \t\tcase T_${n}:
@@ -366,9 +361,8 @@ _equal${n}(const $n *a, const $n *b)
 		}
 		elsif ($t =~ /\w+\[/)
 		{
-			# COPY_SCALAR_FIELD might work for these, but let's not assume that
-			print $cf "\tmemcpy(newnode->$f, from->$f, sizeof(newnode->$f));\n" unless $copy_ignore;
-			print $ef "\tCOMPARE_POINTER_FIELD($f, sizeof(a->$f));\n" unless $equal_ignore;
+			print $cf "\tCOPY_ARRAY_FIELD($f);\n" unless $copy_ignore;
+			print $ef "\tCOMPARE_ARRAY_FIELD($f);\n" unless $equal_ignore;
 		}
 		elsif ($t eq 'struct CustomPathMethods*' ||	$t eq 'struct CustomScanMethods*')
 		{
@@ -404,20 +398,6 @@ open my $rf, '>', 'readfuncs.inc1.c' . $tmpext or die $!;
 open my $of2, '>', 'outfuncs.inc2.c' . $tmpext or die $!;
 open my $rf2, '>', 'readfuncs.inc2.c' . $tmpext or die $!;
 
-my %name_map = (
-	'ARRAYEXPR' => 'ARRAY',
-	'CASEEXPR' => 'CASE',
-	'CASEWHEN' => 'WHEN',
-	'COALESCEEXPR' => 'COALESCE',
-	'COLLATEEXPR' => 'COLLATE',
-	'DECLARECURSORSTMT' => 'DECLARECURSOR',
-	'MINMAXEXPR' => 'MINMAX',
-	'NOTIFYSTMT' => 'NOTIFY',
-	'RANGETBLENTRY' => 'RTE',
-	'ROWCOMPAREEXPR' => 'ROWCOMPARE',
-	'ROWEXPR' => 'ROW',
-);
-
 my @custom_readwrite = qw(A_Const A_Expr BoolExpr Const Constraint ExtensibleNode Query RangeTblEntry);
 
 foreach my $n (@node_types)
@@ -425,7 +405,7 @@ foreach my $n (@node_types)
 	next if elem $n, @abstract_types;
 	next if elem $n, @no_read_write;
 	next if $n eq 'List';
-	next if $n eq 'Value';
+	next if elem $n, qw(BitString Float Integer String);
 
 	# XXX For now, skip all "Stmt"s except that ones that were there before.
 	if ($n =~ /Stmt$/)
@@ -439,7 +419,6 @@ foreach my $n (@node_types)
 
 	my $N = uc $n;
 	$N =~ s/_//g;
-	$N = $name_map{$N} if $name_map{$N};
 
 	print $of2 "\t\t\tcase T_${n}:\n".
 	  "\t\t\t\t_out${n}(str, obj);\n".
@@ -521,16 +500,12 @@ _read${n}(void)
 		}
 		elsif ($t eq 'double')
 		{
-			# XXX We out to split these into separate types, like Cost
-			# etc.
-			if ($f eq 'allvisfrac')
-			{
-				print $of "\tWRITE_FLOAT_FIELD($f, \"%.6f\");\n";
-			}
-			else
-			{
-				print $of "\tWRITE_FLOAT_FIELD($f, \"%.0f\");\n";
-			}
+			print $of "\tWRITE_FLOAT_FIELD($f, \"%.6f\");\n";
+			print $rf "\tREAD_FLOAT_FIELD($f);\n" unless $no_read;
+		}
+		elsif ($t eq 'Cardinality')
+		{
+			print $of "\tWRITE_FLOAT_FIELD($f, \"%.0f\");\n";
 			print $rf "\tREAD_FLOAT_FIELD($f);\n" unless $no_read;
 		}
 		elsif ($t eq 'Cost')

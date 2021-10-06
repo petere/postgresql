@@ -3105,6 +3105,7 @@ _equalList(const List *a, const List *b)
 	return true;
 }
 
+#ifdef OBSOLETE
 /*
  * Stuff from value.h
  */
@@ -3148,6 +3149,7 @@ _equalPublicationTable(const PublicationTable *a, const PublicationTable *b)
 
 	return true;
 }
+#endif /*OBSOLETE*/
 
 /*
  * equal
@@ -3366,6 +3368,7 @@ equal(const void *a, const void *b)
 			retval = _equalList(a, b);
 			break;
 
+#ifdef OBSOLETE
 		case T_Integer:
 			retval = _equalInteger(a, b);
 			break;
@@ -3379,7 +3382,6 @@ equal(const void *a, const void *b)
 			retval = _equalBitString(a, b);
 			break;
 
-#ifdef OBSOLETE
 			/*
 			 * EXTENSIBLE NODES
 			 */

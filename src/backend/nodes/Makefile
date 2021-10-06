@@ -41,6 +41,7 @@ node_headers = \
 	nodes/extensible.h \
 	nodes/parsenodes.h \
 	nodes/replnodes.h \
+	nodes/value.h \
 	commands/trigger.h \
 	commands/event_trigger.h \
 	foreign/fdwapi.h \

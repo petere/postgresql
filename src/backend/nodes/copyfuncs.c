@@ -4905,6 +4905,7 @@ _copyExtensibleNode(const ExtensibleNode *from)
 	return newnode;
 }
 
+#ifdef OBSOLETE
 /* ****************************************************************
  *					value.h copy functions
  * ****************************************************************
@@ -4950,7 +4951,6 @@ _copyBitString(const BitString *from)
 }
 
 
-#ifdef OBSOLETE
 static ForeignKeyCacheInfo *
 _copyForeignKeyCacheInfo(const ForeignKeyCacheInfo *from)
 {
@@ -4966,7 +4966,6 @@ _copyForeignKeyCacheInfo(const ForeignKeyCacheInfo *from)
 
 	return newnode;
 }
-#endif /*OBSOLETE*/
 
 static PublicationTable *
 _copyPublicationTable(const PublicationTable *from)
@@ -4977,6 +4976,7 @@ _copyPublicationTable(const PublicationTable *from)
 
 	return newnode;
 }
+#endif /*OBSOLETE*/
 
 /*
  * copyObjectImpl -- implementation of copyObject(); see nodes/nodes.h
@@ -5340,7 +5340,6 @@ copyObjectImpl(const void *from)
 		case T_PlaceHolderInfo:
 			retval = _copyPlaceHolderInfo(from);
 			break;
-#endif /*OBSOLETE*/
 
 			/*
 			 * VALUE NODES
@@ -5357,6 +5356,7 @@ copyObjectImpl(const void *from)
 		case T_BitString:
 			retval = _copyBitString(from);
 			break;
+#endif /*OBSOLETE*/
 
 			/*
 			 * LIST NODES
