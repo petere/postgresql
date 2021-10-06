@@ -38,6 +38,7 @@
 #include "nodes/pg_list.h"
 #include "pgstat.h"
 #include "pgtime.h"
+#include "port/pg_bitutils.h"
 #include "postmaster/fork_process.h"
 #include "postmaster/interrupt.h"
 #include "postmaster/postmaster.h"
@@ -129,6 +130,8 @@ static volatile sig_atomic_t rotation_requested = false;
 
 /* Local subroutines */
 #ifdef EXEC_BACKEND
+static int	syslogger_fdget(FILE *file);
+static FILE *syslogger_fdopen(int fd);
 static pid_t syslogger_forkexec(void);
 static void syslogger_parseArgs(int argc, char *argv[]);
 #endif
@@ -733,6 +736,60 @@ SysLogger_Start(void)
 #ifdef EXEC_BACKEND
 
 /*
+ * syslogger_fdget() -
+ *
+ * Utility wrapper to grab the file descriptor of an opened error output
+ * file.  Used when building the command to fork the logging collector.
+ */
+static int
+syslogger_fdget(FILE *file)
+{
+#ifndef WIN32
+	if (file != NULL)
+		return fileno(file);
+	else
+		return -1;
+#else
+	if (file != NULL)
+		return (int) _get_osfhandle(_fileno(file));
+	else
+		return 0;
+#endif							/* WIN32 */
+}
+
+/*
+ * syslogger_fdopen() -
+ *
+ * Utility wrapper to re-open an error output file, using the given file
+ * descriptor.  Used when parsing arguments in a forked logging collector.
+ */
+static FILE *
+syslogger_fdopen(int fd)
+{
+	FILE	   *file = NULL;
+
+#ifndef WIN32
+	if (fd != -1)
+	{
+		file = fdopen(fd, "a");
+		setvbuf(file, NULL, PG_IOLBF, 0);
+	}
+#else							/* WIN32 */
+	if (fd != 0)
+	{
+		fd = _open_osfhandle(fd, _O_APPEND | _O_TEXT);
+		if (fd > 0)
+		{
+			file = fdopen(fd, "a");
+			setvbuf(file, NULL, PG_IOLBF, 0);
+		}
+	}
+#endif							/* WIN32 */
+
+	return file;
+}
+
+/*
  * syslogger_forkexec() -
  *
  * Format up the arglist for, then fork and exec, a syslogger process
@@ -750,34 +807,11 @@ syslogger_forkexec(void)
 	av[ac++] = NULL;			/* filled in by postmaster_forkexec */
 
 	/* static variables (those not passed by write_backend_variables) */
-#ifndef WIN32
-	if (syslogFile != NULL)
-		snprintf(filenobuf, sizeof(filenobuf), "%d",
-				 fileno(syslogFile));
-	else
-		strcpy(filenobuf, "-1");
-#else							/* WIN32 */
-	if (syslogFile != NULL)
-		snprintf(filenobuf, sizeof(filenobuf), "%ld",
-				 (long) _get_osfhandle(_fileno(syslogFile)));
-	else
-		strcpy(filenobuf, "0");
-#endif							/* WIN32 */
+	snprintf(filenobuf, sizeof(filenobuf), "%d",
+			 syslogger_fdget(syslogFile));
 	av[ac++] = filenobuf;
-
-#ifndef WIN32
-	if (csvlogFile != NULL)
-		snprintf(csvfilenobuf, sizeof(csvfilenobuf), "%d",
-				 fileno(csvlogFile));
-	else
-		strcpy(csvfilenobuf, "-1");
-#else							/* WIN32 */
-	if (csvlogFile != NULL)
-		snprintf(csvfilenobuf, sizeof(csvfilenobuf), "%ld",
-				 (long) _get_osfhandle(_fileno(csvlogFile)));
-	else
-		strcpy(csvfilenobuf, "0");
-#endif							/* WIN32 */
+	snprintf(csvfilenobuf, sizeof(csvfilenobuf), "%d",
+			 syslogger_fdget(csvlogFile));
 	av[ac++] = csvfilenobuf;
 
 	av[ac] = NULL;
@@ -806,41 +840,10 @@ syslogger_parseArgs(int argc, char *argv[])
 	 * fails there's not a lot we can do to report the problem anyway.  As
 	 * coded, we'll just crash on a null pointer dereference after failure...
 	 */
-#ifndef WIN32
 	fd = atoi(*argv++);
-	if (fd != -1)
-	{
-		syslogFile = fdopen(fd, "a");
-		setvbuf(syslogFile, NULL, PG_IOLBF, 0);
-	}
+	syslogFile = syslogger_fdopen(fd);
 	fd = atoi(*argv++);
-	if (fd != -1)
-	{
-		csvlogFile = fdopen(fd, "a");
-		setvbuf(csvlogFile, NULL, PG_IOLBF, 0);
-	}
-#else							/* WIN32 */
-	fd = atoi(*argv++);
-	if (fd != 0)
-	{
-		fd = _open_osfhandle(fd, _O_APPEND | _O_TEXT);
-		if (fd > 0)
-		{
-			syslogFile = fdopen(fd, "a");
-			setvbuf(syslogFile, NULL, PG_IOLBF, 0);
-		}
-	}
-	fd = atoi(*argv++);
-	if (fd != 0)
-	{
-		fd = _open_osfhandle(fd, _O_APPEND | _O_TEXT);
-		if (fd > 0)
-		{
-			csvlogFile = fdopen(fd, "a");
-			setvbuf(csvlogFile, NULL, PG_IOLBF, 0);
-		}
-	}
-#endif							/* WIN32 */
+	csvlogFile = syslogger_fdopen(fd);
 }
 #endif							/* EXEC_BACKEND */
 
@@ -885,14 +888,15 @@ process_pipe_input(char *logbuffer, int *bytes_in_logbuffer)
 	{
 		PipeProtoHeader p;
 		int			chunklen;
+		bits8		dest_flags;
 
 		/* Do we have a valid header? */
 		memcpy(&p, cursor, offsetof(PipeProtoHeader, data));
+		dest_flags = p.flags & (PIPE_PROTO_DEST_STDERR | PIPE_PROTO_DEST_CSVLOG);
 		if (p.nuls[0] == '\0' && p.nuls[1] == '\0' &&
 			p.len > 0 && p.len <= PIPE_MAX_PAYLOAD &&
 			p.pid != 0 &&
-			(p.is_last == 't' || p.is_last == 'f' ||
-			 p.is_last == 'T' || p.is_last == 'F'))
+			pg_popcount((char *) &dest_flags, 1) == 1)
 		{
 			List	   *buffer_list;
 			ListCell   *cell;
@@ -906,8 +910,15 @@ process_pipe_input(char *logbuffer, int *bytes_in_logbuffer)
 			if (count < chunklen)
 				break;
 
-			dest = (p.is_last == 'T' || p.is_last == 'F') ?
-				LOG_DESTINATION_CSVLOG : LOG_DESTINATION_STDERR;
+			if ((p.flags & PIPE_PROTO_DEST_STDERR) != 0)
+				dest = LOG_DESTINATION_STDERR;
+			else if ((p.flags & PIPE_PROTO_DEST_CSVLOG) != 0)
+				dest = LOG_DESTINATION_CSVLOG;
+			else
+			{
+				/* this should never happen as of the header validation */
+				Assert(false);
+			}
 
 			/* Locate any existing buffer for this source pid */
 			buffer_list = buffer_lists[p.pid % NBUFFER_LISTS];
@@ -924,7 +935,7 @@ process_pipe_input(char *logbuffer, int *bytes_in_logbuffer)
 					free_slot = buf;
 			}
 
-			if (p.is_last == 'f' || p.is_last == 'F')
+			if ((p.flags & PIPE_PROTO_IS_LAST) == 0)
 			{
 				/*
 				 * Save a complete non-final chunk in a per-pid buffer

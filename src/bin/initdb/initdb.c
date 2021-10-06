@@ -1071,7 +1071,7 @@ setup_config(void)
 	else
 		snprintf(repltok, sizeof(repltok), "shared_buffers = %dkB",
 				 n_buffers * (BLCKSZ / 1024));
-	conflines = replace_token(conflines, "#shared_buffers = 32MB", repltok);
+	conflines = replace_token(conflines, "#shared_buffers = 128MB", repltok);
 
 #ifdef HAVE_UNIX_SOCKETS
 	snprintf(repltok, sizeof(repltok), "#unix_socket_directories = '%s'",
@@ -1633,8 +1633,7 @@ setup_privileges(FILE *cmdfd)
 		CppAsString2(RELKIND_VIEW) ", " CppAsString2(RELKIND_MATVIEW) ", "
 		CppAsString2(RELKIND_SEQUENCE) ")"
 		"  AND relacl IS NULL;\n\n",
-		"GRANT USAGE ON SCHEMA pg_catalog TO PUBLIC;\n\n",
-		"GRANT CREATE, USAGE ON SCHEMA public TO PUBLIC;\n\n",
+		"GRANT USAGE ON SCHEMA pg_catalog, public TO PUBLIC;\n\n",
 		"REVOKE ALL ON pg_largeobject FROM PUBLIC;\n\n",
 		"INSERT INTO pg_init_privs "
 		"  (objoid, classoid, objsubid, initprivs, privtype)"

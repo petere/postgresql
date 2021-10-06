@@ -358,6 +358,16 @@ insert into graph0 values
 	(1, 4, 'arc 1 -> 4'),
 	(4, 5, 'arc 4 -> 5');
 
+explain (verbose, costs off)
+with recursive search_graph(f, t, label) as (
+	select * from graph0 g
+	union all
+	select g.*
+	from graph0 g, search_graph sg
+	where g.f = sg.t
+) search depth first by f, t set seq
+select * from search_graph order by seq;
+
 with recursive search_graph(f, t, label) as (
 	select * from graph0 g
 	union all
@@ -374,6 +384,16 @@ with recursive search_graph(f, t, label) as (
 	from graph0 g, search_graph sg
 	where g.f = sg.t
 ) search depth first by f, t set seq
+select * from search_graph order by seq;
+
+explain (verbose, costs off)
+with recursive search_graph(f, t, label) as (
+	select * from graph0 g
+	union all
+	select g.*
+	from graph0 g, search_graph sg
+	where g.f = sg.t
+) search breadth first by f, t set seq
 select * from search_graph order by seq;
 
 with recursive search_graph(f, t, label) as (
@@ -502,6 +522,16 @@ with recursive search_graph(f, t, label, is_cycle, path) as (
 select * from search_graph order by path;
 
 -- CYCLE clause
+
+explain (verbose, costs off)
+with recursive search_graph(f, t, label) as (
+	select * from graph g
+	union all
+	select g.*
+	from graph g, search_graph sg
+	where g.f = sg.t
+) cycle f, t set is_cycle using path
+select * from search_graph;
 
 with recursive search_graph(f, t, label) as (
 	select * from graph g
@@ -1118,13 +1148,38 @@ CREATE TEMP TABLE bug6051_2 (i int);
 
 CREATE RULE bug6051_ins AS ON INSERT TO bug6051 DO INSTEAD
  INSERT INTO bug6051_2
- SELECT NEW.i;
+ VALUES(NEW.i);
 
 WITH t1 AS ( DELETE FROM bug6051 RETURNING * )
 INSERT INTO bug6051 SELECT * FROM t1;
 
 SELECT * FROM bug6051;
 SELECT * FROM bug6051_2;
+
+-- check INSERT...SELECT rule actions are disallowed on commands
+-- that have modifyingCTEs
+CREATE OR REPLACE RULE bug6051_ins AS ON INSERT TO bug6051 DO INSTEAD
+ INSERT INTO bug6051_2
+ SELECT NEW.i;
+
+WITH t1 AS ( DELETE FROM bug6051 RETURNING * )
+INSERT INTO bug6051 SELECT * FROM t1;
+
+-- silly example to verify that hasModifyingCTE flag is propagated
+CREATE TEMP TABLE bug6051_3 AS
+  SELECT a FROM generate_series(11,13) AS a;
+
+CREATE RULE bug6051_3_ins AS ON INSERT TO bug6051_3 DO INSTEAD
+  SELECT i FROM bug6051_2;
+
+BEGIN; SET LOCAL force_parallel_mode = on;
+
+WITH t1 AS ( DELETE FROM bug6051_3 RETURNING * )
+  INSERT INTO bug6051_3 SELECT * FROM t1;
+
+COMMIT;
+
+SELECT * FROM bug6051_3;
 
 -- a truly recursive CTE in the same list
 WITH RECURSIVE t(a) AS (

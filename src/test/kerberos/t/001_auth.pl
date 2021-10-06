@@ -185,6 +185,8 @@ note "running tests";
 # Test connection success or failure, and if success, that query returns true.
 sub test_access
 {
+	local $Test::Builder::Level = $Test::Builder::Level + 1;
+
 	my ($node, $role, $query, $expected_res, $gssencmode, $test_name,
 		@expect_log_msgs)
 	  = @_;
@@ -298,7 +300,7 @@ test_query(
 test_query(
 	$node,
 	'test1',
-	"CREATE TABLE mytab (f1 int primary key);\n"
+	"CREATE TEMP TABLE mytab (f1 int primary key);\n"
 	  . "COPY mytab FROM STDIN;\n"
 	  . join("\n", (1 .. 100000))
 	  . "\n\\.\n"

@@ -53,6 +53,10 @@
 #define COPY_STRING_FIELD(fldname) \
 	(newnode->fldname = from->fldname ? pstrdup(from->fldname) : (char *) NULL)
 
+/* Copy a field that is an inline array */
+#define COPY_ARRAY_FIELD(fldname) \
+	memcpy(newnode->fldname, from->fldname, sizeof(newnode->fldname))
+
 /* Copy a field that is a pointer to a simple palloc'd object of size sz */
 #define COPY_POINTER_FIELD(fldname, sz) \
 	do { \
@@ -2735,25 +2739,30 @@ _copyA_Const(const A_Const *from)
 {
 	A_Const    *newnode = makeNode(A_Const);
 
-	/* This part must duplicate _copyValue */
-	COPY_SCALAR_FIELD(val.type);
-	switch (from->val.type)
+	COPY_SCALAR_FIELD(isnull);
+	if (!from->isnull)
 	{
-		case T_Integer:
-			COPY_SCALAR_FIELD(val.val.ival);
-			break;
-		case T_Float:
-		case T_String:
-		case T_BitString:
-			COPY_STRING_FIELD(val.val.str);
-			break;
-		case T_Null:
-			/* nothing to do */
-			break;
-		default:
-			elog(ERROR, "unrecognized node type: %d",
-				 (int) from->val.type);
-			break;
+		/* This part must duplicate other _copy*() functions. */
+		COPY_SCALAR_FIELD(val.node.type);
+		switch (nodeTag(&from->val))
+		{
+			case T_Integer:
+				COPY_SCALAR_FIELD(val.ival.val);
+				break;
+			case T_Float:
+				COPY_STRING_FIELD(val.fval.val);
+				break;
+			case T_String:
+				COPY_STRING_FIELD(val.sval.val);
+				break;
+			case T_BitString:
+				COPY_STRING_FIELD(val.bsval.val);
+				break;
+			default:
+				elog(ERROR, "unrecognized node type: %d",
+					 (int) nodeTag(&from->val));
+				break;
+		}
 	}
 
 	COPY_LOCATION_FIELD(location);
@@ -4900,32 +4909,43 @@ _copyExtensibleNode(const ExtensibleNode *from)
  *					value.h copy functions
  * ****************************************************************
  */
-static Value *
-_copyValue(const Value *from)
+static Integer *
+_copyInteger(const Integer *from)
 {
-	Value	   *newnode = makeNode(Value);
+	Integer	   *newnode = makeNode(Integer);
 
-	/* See also _copyAConst when changing this code! */
+	COPY_SCALAR_FIELD(val);
 
-	COPY_SCALAR_FIELD(type);
-	switch (from->type)
-	{
-		case T_Integer:
-			COPY_SCALAR_FIELD(val.ival);
-			break;
-		case T_Float:
-		case T_String:
-		case T_BitString:
-			COPY_STRING_FIELD(val.str);
-			break;
-		case T_Null:
-			/* nothing to do */
-			break;
-		default:
-			elog(ERROR, "unrecognized node type: %d",
-				 (int) from->type);
-			break;
-	}
+	return newnode;
+}
+
+static Float *
+_copyFloat(const Float *from)
+{
+	Float	   *newnode = makeNode(Float);
+
+	COPY_STRING_FIELD(val);
+
+	return newnode;
+}
+
+static String *
+_copyString(const String *from)
+{
+	String	   *newnode = makeNode(String);
+
+	COPY_STRING_FIELD(val);
+
+	return newnode;
+}
+
+static BitString *
+_copyBitString(const BitString *from)
+{
+	BitString   *newnode = makeNode(BitString);
+
+	COPY_STRING_FIELD(val);
+
 	return newnode;
 }
 
@@ -4940,15 +4960,23 @@ _copyForeignKeyCacheInfo(const ForeignKeyCacheInfo *from)
 	COPY_SCALAR_FIELD(conrelid);
 	COPY_SCALAR_FIELD(confrelid);
 	COPY_SCALAR_FIELD(nkeys);
-	/* COPY_SCALAR_FIELD might work for these, but let's not assume that */
-	memcpy(newnode->conkey, from->conkey, sizeof(newnode->conkey));
-	memcpy(newnode->confkey, from->confkey, sizeof(newnode->confkey));
-	memcpy(newnode->conpfeqop, from->conpfeqop, sizeof(newnode->conpfeqop));
+	COPY_ARRAY_FIELD(conkey);
+	COPY_ARRAY_FIELD(confkey);
+	COPY_ARRAY_FIELD(conpfeqop);
 
 	return newnode;
 }
 #endif /*OBSOLETE*/
 
+static PublicationTable *
+_copyPublicationTable(const PublicationTable *from)
+{
+	PublicationTable *newnode = makeNode(PublicationTable);
+
+	COPY_NODE_FIELD(relation);
+
+	return newnode;
+}
 
 /*
  * copyObjectImpl -- implementation of copyObject(); see nodes/nodes.h
@@ -5318,11 +5346,16 @@ copyObjectImpl(const void *from)
 			 * VALUE NODES
 			 */
 		case T_Integer:
+			retval = _copyInteger(from);
+			break;
 		case T_Float:
+			retval = _copyFloat(from);
+			break;
 		case T_String:
+			retval = _copyString(from);
+			break;
 		case T_BitString:
-		case T_Null:
-			retval = _copyValue(from);
+			retval = _copyBitString(from);
 			break;
 
 			/*
@@ -5867,6 +5900,9 @@ copyObjectImpl(const void *from)
 			break;
 		case T_PartitionCmd:
 			retval = _copyPartitionCmd(from);
+			break;
+		case T_PublicationTable:
+			retval = _copyPublicationTable(from);
 			break;
 
 			/*

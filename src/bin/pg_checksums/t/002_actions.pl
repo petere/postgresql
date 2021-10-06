@@ -6,11 +6,12 @@
 
 use strict;
 use warnings;
+use Config;
 use PostgresNode;
 use TestLib;
 
 use Fcntl qw(:seek);
-use Test::More tests => 63;
+use Test::More tests => 66;
 
 
 # Utility routine to create and check a table with corrupted checksums
@@ -177,6 +178,22 @@ command_fails(
 command_fails(
 	[ 'pg_checksums', '--enable', '--filenode', '1234', '-D', $pgdata ],
 	"fails when relfilenodes are requested and action is --enable");
+
+# Test postgres -C for an offline cluster.
+# Run-time GUCs are safe to query here.  Note that a lock file is created,
+# then removed, leading to an extra LOG entry showing in stderr.  This uses
+# log_min_messages=fatal to remove any noise.  This test uses a startup
+# wrapped with pg_ctl to allow the case where this runs under a privileged
+# account on Windows.
+command_checks_all(
+	[
+		'pg_ctl', 'start', '-D', $pgdata, '-s', '-o',
+		'-C data_checksums -c log_min_messages=fatal'
+	],
+	1,
+	[qr/^on$/],
+	[qr/could not start server/],
+	'data_checksums=on is reported on an offline cluster');
 
 # Checks cannot happen with an online cluster
 $node->start;

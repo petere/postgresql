@@ -666,7 +666,7 @@ ReadRecentBuffer(RelFileNode rnode, ForkNumber forkNum, BlockNumber blockNum,
 		{
 			/*
 			 * It's now safe to pin the buffer.  We can't pin first and ask
-			 * questions later, because because it might confuse code paths
+			 * questions later, because it might confuse code paths
 			 * like InvalidateBuffer() if we pinned a random non-matching
 			 * buffer.
 			 */
@@ -824,7 +824,16 @@ ReadBuffer_common(SMgrRelation smgr, char relpersistence, ForkNumber forkNum,
 
 	/* Substitute proper block number if caller asked for P_NEW */
 	if (isExtend)
+	{
 		blockNum = smgrnblocks(smgr, forkNum);
+		/* Fail if relation is already at maximum possible length */
+		if (blockNum == P_NEW)
+			ereport(ERROR,
+					(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+					 errmsg("cannot extend relation %s beyond %u blocks",
+							relpath(smgr->smgr_rnode, forkNum),
+							P_NEW)));
+	}
 
 	if (isLocalBuf)
 	{
@@ -2929,7 +2938,6 @@ RelationGetNumberOfBlocksInFork(Relation relation, ForkNumber forkNum)
 	{
 		case RELKIND_SEQUENCE:
 		case RELKIND_INDEX:
-		case RELKIND_PARTITIONED_INDEX:
 			return smgrnblocks(RelationGetSmgr(relation), forkNum);
 
 		case RELKIND_RELATION:
@@ -2951,6 +2959,7 @@ RelationGetNumberOfBlocksInFork(Relation relation, ForkNumber forkNum)
 		case RELKIND_VIEW:
 		case RELKIND_COMPOSITE_TYPE:
 		case RELKIND_FOREIGN_TABLE:
+		case RELKIND_PARTITIONED_INDEX:
 		case RELKIND_PARTITIONED_TABLE:
 		default:
 			Assert(false);

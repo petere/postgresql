@@ -357,8 +357,8 @@ set_authn_id(Port *port, const char *id)
 		 * connection continue, either.
 		 */
 		ereport(FATAL,
-				(errmsg("connection was re-authenticated"),
-				 errdetail_log("previous ID: \"%s\"; new ID: \"%s\"",
+				(errmsg("authentication identifier set more than once"),
+				 errdetail_log("previous identifier: \"%s\"; new identifier: \"%s\"",
 							   port->authn_id, id)));
 	}
 
@@ -1002,8 +1002,8 @@ pg_GSS_recvauth(Port *port)
 		/* gbuf no longer used */
 		pfree(buf.data);
 
-		elog(DEBUG5, "gss_accept_sec_context major: %d, "
-			 "minor: %d, outlen: %u, outflags: %x",
+		elog(DEBUG5, "gss_accept_sec_context major: %u, "
+			 "minor: %u, outlen: %u, outflags: %x",
 			 maj_stat, min_stat,
 			 (unsigned int) port->gss->outbuf.length, gflags);
 

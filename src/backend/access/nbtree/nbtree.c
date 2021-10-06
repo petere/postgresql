@@ -963,11 +963,10 @@ btvacuumscan(IndexVacuumInfo *info, IndexBulkDeleteResult *stats,
 	 * recycled.  Taking the lock synchronizes things enough to prevent a
 	 * problem: either num_pages won't include the new page, or _bt_getbuf
 	 * already has write lock on the buffer and it will be fully initialized
-	 * before we can examine it.  (See also vacuumlazy.c, which has the same
-	 * issue.)	Also, we need not worry if a page is added immediately after
-	 * we look; the page splitting code already has write-lock on the left
-	 * page before it adds a right page, so we must already have processed any
-	 * tuples due to be moved into such a page.
+	 * before we can examine it.  Also, we need not worry if a page is added
+	 * immediately after we look; the page splitting code already has
+	 * write-lock on the left page before it adds a right page, so we must
+	 * already have processed any tuples due to be moved into such a page.
 	 *
 	 * We can skip locking for new or temp relations, however, since no one
 	 * else could be accessing them.
@@ -1184,12 +1183,6 @@ backtrack:
 			opaque->btpo_next < scanblkno)
 			backtrack_to = opaque->btpo_next;
 
-		/*
-		 * When each VACUUM begins, it determines an OldestXmin cutoff value.
-		 * Tuples before the cutoff are removed by VACUUM.  Scan over all
-		 * items to see which ones need to be deleted according to cutoff
-		 * point using callback.
-		 */
 		ndeletable = 0;
 		nupdatable = 0;
 		minoff = P_FIRSTDATAKEY(opaque);
@@ -1198,6 +1191,7 @@ backtrack:
 		nhtidslive = 0;
 		if (callback)
 		{
+			/* btbulkdelete callback tells us what to delete (or update) */
 			for (offnum = minoff;
 				 offnum <= maxoff;
 				 offnum = OffsetNumberNext(offnum))
@@ -1207,26 +1201,6 @@ backtrack:
 				itup = (IndexTuple) PageGetItem(page,
 												PageGetItemId(page, offnum));
 
-				/*
-				 * Hot Standby assumes that it's okay that XLOG_BTREE_VACUUM
-				 * records do not produce their own conflicts.  This is safe
-				 * as long as the callback function only considers whether the
-				 * index tuple refers to pre-cutoff heap tuples that were
-				 * certainly already pruned away during VACUUM's initial heap
-				 * scan by the time we get here. (heapam's XLOG_HEAP2_PRUNE
-				 * records produce conflicts using a latestRemovedXid value
-				 * for the pointed-to heap tuples, so there is no need to
-				 * produce our own conflict now.)
-				 *
-				 * Backends with snapshots acquired after a VACUUM starts but
-				 * before it finishes could have visibility cutoff with a
-				 * later xid than VACUUM's OldestXmin cutoff.  These backends
-				 * might happen to opportunistically mark some index tuples
-				 * LP_DEAD before we reach them, even though they may be after
-				 * our cutoff.  We don't try to kill these "extra" index
-				 * tuples in _bt_delitems_vacuum().  This keep things simple,
-				 * and allows us to always avoid generating our own conflicts.
-				 */
 				Assert(!BTreeTupleIsPivot(itup));
 				if (!BTreeTupleIsPosting(itup))
 				{

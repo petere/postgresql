@@ -776,6 +776,10 @@ static const SchemaQuery Query_for_list_of_collations = {
 "       and pg_catalog.quote_ident(c1.relname)='%s'"\
 "       and pg_catalog.pg_table_is_visible(c2.oid)"
 
+#define Query_for_unique_index_of_table \
+Query_for_index_of_table \
+"       and i.indisunique"
+
 /* the silly-looking length condition is just to eat up the current word */
 #define Query_for_constraint_of_table \
 "SELECT pg_catalog.quote_ident(conname) "\
@@ -1510,24 +1514,24 @@ psql_completion(const char *text, int start, int end)
 		"\\des", "\\det", "\\deu", "\\dew", "\\dE", "\\df",
 		"\\dF", "\\dFd", "\\dFp", "\\dFt", "\\dg", "\\di", "\\dl", "\\dL",
 		"\\dm", "\\dn", "\\do", "\\dO", "\\dp", "\\dP", "\\dPi", "\\dPt",
-		"\\drds", "\\dRs", "\\dRp", "\\ds", "\\dS",
+		"\\drds", "\\dRs", "\\dRp", "\\ds",
 		"\\dt", "\\dT", "\\dv", "\\du", "\\dx", "\\dX", "\\dy",
-		"\\e", "\\echo", "\\ef", "\\elif", "\\else", "\\encoding",
+		"\\echo", "\\edit", "\\ef", "\\elif", "\\else", "\\encoding",
 		"\\endif", "\\errverbose", "\\ev",
 		"\\f",
 		"\\g", "\\gdesc", "\\gexec", "\\gset", "\\gx",
-		"\\h", "\\help", "\\H",
-		"\\i", "\\if", "\\ir",
-		"\\l", "\\lo_import", "\\lo_export", "\\lo_list", "\\lo_unlink",
-		"\\o",
-		"\\p", "\\password", "\\prompt", "\\pset",
-		"\\q", "\\qecho",
-		"\\r",
+		"\\help", "\\html",
+		"\\if", "\\include", "\\include_relative", "\\ir",
+		"\\list", "\\lo_import", "\\lo_export", "\\lo_list", "\\lo_unlink",
+		"\\out",
+		"\\password", "\\print", "\\prompt", "\\pset",
+		"\\qecho", "\\quit",
+		"\\reset",
 		"\\s", "\\set", "\\setenv", "\\sf", "\\sv",
 		"\\t", "\\T", "\\timing",
 		"\\unset",
 		"\\x",
-		"\\w", "\\warn", "\\watch",
+		"\\warn", "\\watch", "\\write",
 		"\\z",
 		"\\!", "\\?",
 		NULL
@@ -1675,14 +1679,10 @@ psql_completion(const char *text, int start, int end)
 	else if (HeadMatches("ALTER", "SUBSCRIPTION", MatchAny) &&
 			 TailMatches("ADD|DROP|SET", "PUBLICATION", MatchAny))
 		COMPLETE_WITH("WITH (");
-	/* ALTER SUBSCRIPTION <name> ADD|SET PUBLICATION <name> WITH ( */
+	/* ALTER SUBSCRIPTION <name> ADD|DROP|SET PUBLICATION <name> WITH ( */
 	else if (HeadMatches("ALTER", "SUBSCRIPTION", MatchAny) &&
-			 TailMatches("ADD|SET", "PUBLICATION", MatchAny, "WITH", "("))
+			 TailMatches("ADD|DROP|SET", "PUBLICATION", MatchAny, "WITH", "("))
 		COMPLETE_WITH("copy_data", "refresh");
-	/* ALTER SUBSCRIPTION <name> DROP PUBLICATION <name> WITH ( */
-	else if (HeadMatches("ALTER", "SUBSCRIPTION", MatchAny) &&
-			 TailMatches("DROP", "PUBLICATION", MatchAny, "WITH", "("))
-		COMPLETE_WITH("refresh");
 
 	/* ALTER SCHEMA <name> */
 	else if (Matches("ALTER", "SCHEMA", MatchAny))
@@ -2023,6 +2023,53 @@ psql_completion(const char *text, int start, int end)
 					  "OWNER TO", "SET", "VALIDATE CONSTRAINT",
 					  "REPLICA IDENTITY", "ATTACH PARTITION",
 					  "DETACH PARTITION", "FORCE ROW LEVEL SECURITY");
+	/* ALTER TABLE xxx ADD */
+	else if (Matches("ALTER", "TABLE", MatchAny, "ADD"))
+	{
+		/* make sure to keep this list and the !Matches() below in sync */
+		COMPLETE_WITH("COLUMN", "CONSTRAINT", "CHECK", "UNIQUE", "PRIMARY KEY",
+					  "EXCLUDE", "FOREIGN KEY");
+	}
+	/* ATER TABLE xxx ADD [COLUMN] yyy */
+	else if (Matches("ALTER", "TABLE", MatchAny, "ADD", "COLUMN", MatchAny) ||
+			 (Matches("ALTER", "TABLE", MatchAny, "ADD", MatchAny) &&
+			  !Matches("ALTER", "TABLE", MatchAny, "ADD", "COLUMN|CONSTRAINT|CHECK|UNIQUE|PRIMARY|EXCLUDE|FOREIGN")))
+		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_datatypes, NULL);
+	/* ALTER TABLE xxx ADD CONSTRAINT yyy */
+	else if (Matches("ALTER", "TABLE", MatchAny, "ADD", "CONSTRAINT", MatchAny))
+		COMPLETE_WITH("CHECK", "UNIQUE", "PRIMARY KEY", "EXCLUDE", "FOREIGN KEY");
+	/* ALTER TABLE xxx ADD [CONSTRAINT yyy] (PRIMARY KEY|UNIQUE) */
+	else if (Matches("ALTER", "TABLE", MatchAny, "ADD", "PRIMARY", "KEY") ||
+			 Matches("ALTER", "TABLE", MatchAny, "ADD", "UNIQUE") ||
+			 Matches("ALTER", "TABLE", MatchAny, "ADD", "CONSTRAINT", MatchAny, "PRIMARY", "KEY") ||
+			 Matches("ALTER", "TABLE", MatchAny, "ADD", "CONSTRAINT", MatchAny, "UNIQUE"))
+		COMPLETE_WITH("(", "USING INDEX");
+	/* ALTER TABLE xxx ADD PRIMARY KEY USING INDEX */
+	else if (Matches("ALTER", "TABLE", MatchAny, "ADD", "PRIMARY", "KEY", "USING", "INDEX"))
+	{
+		completion_info_charp = prev6_wd;
+		COMPLETE_WITH_QUERY(Query_for_unique_index_of_table);
+	}
+	/* ALTER TABLE xxx ADD UNIQUE USING INDEX */
+	else if (Matches("ALTER", "TABLE", MatchAny, "ADD", "UNIQUE", "USING", "INDEX"))
+	{
+		completion_info_charp = prev5_wd;
+		COMPLETE_WITH_QUERY(Query_for_unique_index_of_table);
+	}
+	/* ALTER TABLE xxx ADD CONSTRAINT yyy PRIMARY KEY USING INDEX */
+	else if (Matches("ALTER", "TABLE", MatchAny, "ADD", "CONSTRAINT", MatchAny,
+					 "PRIMARY", "KEY", "USING", "INDEX"))
+	{
+		completion_info_charp = prev8_wd;
+		COMPLETE_WITH_QUERY(Query_for_unique_index_of_table);
+	}
+	/* ALTER TABLE xxx ADD CONSTRAINT yyy UNIQUE USING INDEX */
+	else if (Matches("ALTER", "TABLE", MatchAny, "ADD", "CONSTRAINT", MatchAny,
+					 "UNIQUE", "USING", "INDEX"))
+	{
+		completion_info_charp = prev7_wd;
+		COMPLETE_WITH_QUERY(Query_for_unique_index_of_table);
+	}
 	/* ALTER TABLE xxx ENABLE */
 	else if (Matches("ALTER", "TABLE", MatchAny, "ENABLE"))
 		COMPLETE_WITH("ALWAYS", "REPLICA", "ROW LEVEL SECURITY", "RULE",
@@ -2644,8 +2691,13 @@ psql_completion(const char *text, int start, int end)
 		COMPLETE_WITH("FOR TABLE", "FOR ALL TABLES", "WITH (");
 	else if (Matches("CREATE", "PUBLICATION", MatchAny, "FOR"))
 		COMPLETE_WITH("TABLE", "ALL TABLES");
-	/* Complete "CREATE PUBLICATION <name> FOR TABLE <table>, ..." */
-	else if (HeadMatches("CREATE", "PUBLICATION", MatchAny, "FOR", "TABLE"))
+	else if (Matches("CREATE", "PUBLICATION", MatchAny, "FOR", "ALL"))
+		COMPLETE_WITH("TABLES");
+	else if (Matches("CREATE", "PUBLICATION", MatchAny, "FOR", "ALL", "TABLES")
+			 || Matches("CREATE", "PUBLICATION", MatchAny, "FOR", "TABLE", MatchAny))
+		COMPLETE_WITH("WITH (");
+	/* Complete "CREATE PUBLICATION <name> FOR TABLE" with "<table>, ..." */
+	else if (Matches("CREATE", "PUBLICATION", MatchAny, "FOR", "TABLE"))
 		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_tables, NULL);
 	/* Complete "CREATE PUBLICATION <name> [...] WITH" */
 	else if (HeadMatches("CREATE", "PUBLICATION") && TailMatches("WITH", "("))
@@ -3222,7 +3274,7 @@ psql_completion(const char *text, int start, int end)
  */
 	else if (Matches("EXPLAIN"))
 		COMPLETE_WITH("SELECT", "INSERT INTO", "DELETE FROM", "UPDATE", "DECLARE",
-					  "ANALYZE", "VERBOSE");
+					  "EXECUTE", "ANALYZE", "VERBOSE");
 	else if (HeadMatches("EXPLAIN", "(*") &&
 			 !HeadMatches("EXPLAIN", "(*)"))
 	{
@@ -3241,11 +3293,12 @@ psql_completion(const char *text, int start, int end)
 	}
 	else if (Matches("EXPLAIN", "ANALYZE"))
 		COMPLETE_WITH("SELECT", "INSERT INTO", "DELETE FROM", "UPDATE", "DECLARE",
-					  "VERBOSE");
+					  "EXECUTE", "VERBOSE");
 	else if (Matches("EXPLAIN", "(*)") ||
 			 Matches("EXPLAIN", "VERBOSE") ||
 			 Matches("EXPLAIN", "ANALYZE", "VERBOSE"))
-		COMPLETE_WITH("SELECT", "INSERT INTO", "DELETE FROM", "UPDATE", "DECLARE");
+		COMPLETE_WITH("SELECT", "INSERT INTO", "DELETE FROM", "UPDATE", "DECLARE",
+					  "EXECUTE");
 
 /* FETCH && MOVE */
 
@@ -3546,39 +3599,48 @@ psql_completion(const char *text, int start, int end)
 		COMPLETE_WITH("(");
 
 /* LOCK */
-	/* Complete LOCK [TABLE] with a list of tables */
+	/* Complete LOCK [TABLE] [ONLY] with a list of tables */
 	else if (Matches("LOCK"))
 		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_tables,
-								   " UNION SELECT 'TABLE'");
+								   " UNION SELECT 'TABLE'"
+								   " UNION SELECT 'ONLY'");
 	else if (Matches("LOCK", "TABLE"))
-		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_tables, "");
-
+		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_tables,
+								   " UNION SELECT 'ONLY'");
+	else if (Matches("LOCK", "TABLE", "ONLY") || Matches("LOCK", "ONLY"))
+		COMPLETE_WITH_SCHEMA_QUERY(Query_for_list_of_tables, NULL);
 	/* For the following, handle the case of a single table only for now */
 
-	/* Complete LOCK [TABLE] <table> with "IN" */
-	else if (Matches("LOCK", MatchAnyExcept("TABLE")) ||
-			 Matches("LOCK", "TABLE", MatchAny))
-		COMPLETE_WITH("IN");
+	/* Complete LOCK [TABLE] [ONLY] <table> with IN or NOWAIT */
+	else if (Matches("LOCK", MatchAnyExcept("TABLE|ONLY")) ||
+			 Matches("LOCK", "TABLE", MatchAnyExcept("ONLY")) ||
+			 Matches("LOCK", "ONLY", MatchAny) ||
+			 Matches("LOCK", "TABLE", "ONLY", MatchAny))
+		COMPLETE_WITH("IN", "NOWAIT");
 
-	/* Complete LOCK [TABLE] <table> IN with a lock mode */
-	else if (Matches("LOCK", MatchAny, "IN") ||
-			 Matches("LOCK", "TABLE", MatchAny, "IN"))
+	/* Complete LOCK [TABLE] [ONLY] <table> IN with a lock mode */
+	else if (HeadMatches("LOCK") && TailMatches("IN"))
 		COMPLETE_WITH("ACCESS SHARE MODE",
 					  "ROW SHARE MODE", "ROW EXCLUSIVE MODE",
 					  "SHARE UPDATE EXCLUSIVE MODE", "SHARE MODE",
 					  "SHARE ROW EXCLUSIVE MODE",
 					  "EXCLUSIVE MODE", "ACCESS EXCLUSIVE MODE");
 
-	/* Complete LOCK [TABLE] <table> IN ACCESS|ROW with rest of lock mode */
-	else if (Matches("LOCK", MatchAny, "IN", "ACCESS|ROW") ||
-			 Matches("LOCK", "TABLE", MatchAny, "IN", "ACCESS|ROW"))
+	/*
+	 * Complete LOCK [TABLE][ONLY] <table> IN ACCESS|ROW with rest of lock
+	 * mode
+	 */
+	else if (HeadMatches("LOCK") && TailMatches("IN", "ACCESS|ROW"))
 		COMPLETE_WITH("EXCLUSIVE MODE", "SHARE MODE");
 
-	/* Complete LOCK [TABLE] <table> IN SHARE with rest of lock mode */
-	else if (Matches("LOCK", MatchAny, "IN", "SHARE") ||
-			 Matches("LOCK", "TABLE", MatchAny, "IN", "SHARE"))
+	/* Complete LOCK [TABLE] [ONLY] <table> IN SHARE with rest of lock mode */
+	else if (HeadMatches("LOCK") && TailMatches("IN", "SHARE"))
 		COMPLETE_WITH("MODE", "ROW EXCLUSIVE MODE",
 					  "UPDATE EXCLUSIVE MODE");
+
+	/* Complete LOCK [TABLE] [ONLY] <table> [IN lockmode MODE] with "NOWAIT" */
+	else if (HeadMatches("LOCK") && TailMatches("MODE"))
+		COMPLETE_WITH("NOWAIT");
 
 /* NOTIFY --- can be inside EXPLAIN, RULE, etc */
 	else if (TailMatches("NOTIFY"))

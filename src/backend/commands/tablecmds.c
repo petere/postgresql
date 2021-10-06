@@ -3850,6 +3850,37 @@ RenameRelationInternal(Oid myrelid, const char *newrelname, bool is_internal, bo
 }
 
 /*
+ *		ResetRelRewrite - reset relrewrite
+ */
+void
+ResetRelRewrite(Oid myrelid)
+{
+	Relation	relrelation;	/* for RELATION relation */
+	HeapTuple	reltup;
+	Form_pg_class relform;
+
+	/*
+	 * Find relation's pg_class tuple.
+	 */
+	relrelation = table_open(RelationRelationId, RowExclusiveLock);
+
+	reltup = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(myrelid));
+	if (!HeapTupleIsValid(reltup))	/* shouldn't happen */
+		elog(ERROR, "cache lookup failed for relation %u", myrelid);
+	relform = (Form_pg_class) GETSTRUCT(reltup);
+
+	/*
+	 * Update pg_class tuple.
+	 */
+	relform->relrewrite = InvalidOid;
+
+	CatalogTupleUpdate(relrelation, &reltup->t_self, reltup);
+
+	heap_freetuple(reltup);
+	table_close(relrelation, RowExclusiveLock);
+}
+
+/*
  * Disallow ALTER TABLE (and similar commands) when the current backend has
  * any open reference to the target table besides the one just acquired by
  * the calling command; this implies there's an open cursor or active plan.
@@ -12554,13 +12585,13 @@ RememberStatisticsForRebuilding(Oid stxoid, AlteredTableInfo *tab)
 	/*
 	 * This de-duplication check is critical for two independent reasons: we
 	 * mustn't try to recreate the same statistics object twice, and if the
-	 * statistics depends on more than one column whose type is to be altered,
-	 * we must capture its definition string before applying any of the type
-	 * changes. ruleutils.c will get confused if we ask again later.
+	 * statistics object depends on more than one column whose type is to be
+	 * altered, we must capture its definition string before applying any of
+	 * the type changes. ruleutils.c will get confused if we ask again later.
 	 */
 	if (!list_member_oid(tab->changedStatisticsOids, stxoid))
 	{
-		/* OK, capture the index's existing definition string */
+		/* OK, capture the statistics object's existing definition string */
 		char	   *defstring = pg_get_statisticsobjdef_string(stxoid);
 
 		tab->changedStatisticsOids = lappend_oid(tab->changedStatisticsOids,

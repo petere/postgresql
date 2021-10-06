@@ -375,6 +375,8 @@ static void identify_join_columns(JoinExpr *j, RangeTblEntry *jrte,
 								  deparse_columns *colinfo);
 static char *get_rtable_name(int rtindex, deparse_context *context);
 static void set_deparse_plan(deparse_namespace *dpns, Plan *plan);
+static Plan *find_recursive_union(deparse_namespace *dpns,
+								  WorkTableScan *wtscan);
 static void push_child_plan(deparse_namespace *dpns, Plan *plan,
 							deparse_namespace *save_dpns);
 static void pop_child_plan(deparse_namespace *dpns,
@@ -1712,7 +1714,7 @@ pg_get_statisticsobj_worker(Oid statextid, bool columns_only, bool missing_ok)
 	{
 		Node	   *expr = (Node *) lfirst(lc);
 		char	   *str;
-		int			prettyFlags = PRETTYFLAG_INDENT;
+		int			prettyFlags = PRETTYFLAG_PAREN;
 
 		str = deparse_expression_pretty(expr, context, false, false,
 										prettyFlags, 0);
@@ -2973,7 +2975,7 @@ pg_get_functiondef(PG_FUNCTION_ARGS)
 	}
 
 	/* And finally the function definition ... */
-	tmp = SysCacheGetAttr(PROCOID, proctup, Anum_pg_proc_prosqlbody, &isnull);
+	(void) SysCacheGetAttr(PROCOID, proctup, Anum_pg_proc_prosqlbody, &isnull);
 	if (proc->prolang == SQLlanguageId && !isnull)
 	{
 		print_function_sqlbody(&buf, proctup);
@@ -3439,7 +3441,10 @@ print_function_sqlbody(StringInfo buf, HeapTuple proctup)
 		{
 			Query	   *query = lfirst_node(Query, lc);
 
-			get_query_def(query, buf, list_make1(&dpns), NULL, PRETTYFLAG_INDENT, WRAP_COLUMN_DEFAULT, 1);
+			/* It seems advisable to get at least AccessShareLock on rels */
+			AcquireRewriteLocks(query, false, false);
+			get_query_def(query, buf, list_make1(&dpns), NULL,
+						  PRETTYFLAG_INDENT, WRAP_COLUMN_DEFAULT, 1);
 			appendStringInfoChar(buf, ';');
 			appendStringInfoChar(buf, '\n');
 		}
@@ -3448,7 +3453,12 @@ print_function_sqlbody(StringInfo buf, HeapTuple proctup)
 	}
 	else
 	{
-		get_query_def(castNode(Query, n), buf, list_make1(&dpns), NULL, 0, WRAP_COLUMN_DEFAULT, 0);
+		Query	   *query = castNode(Query, n);
+
+		/* It seems advisable to get at least AccessShareLock on rels */
+		AcquireRewriteLocks(query, false, false);
+		get_query_def(query, buf, list_make1(&dpns), NULL,
+					  0, WRAP_COLUMN_DEFAULT, 0);
 	}
 }
 
@@ -3467,7 +3477,7 @@ pg_get_function_sqlbody(PG_FUNCTION_ARGS)
 	if (!HeapTupleIsValid(proctup))
 		PG_RETURN_NULL();
 
-	SysCacheGetAttr(PROCOID, proctup, Anum_pg_proc_prosqlbody, &isnull);
+	(void) SysCacheGetAttr(PROCOID, proctup, Anum_pg_proc_prosqlbody, &isnull);
 	if (isnull)
 	{
 		ReleaseSysCache(proctup);
@@ -4858,6 +4868,9 @@ set_deparse_plan(deparse_namespace *dpns, Plan *plan)
 	 * For a SubqueryScan, pretend the subplan is INNER referent.  (We don't
 	 * use OUTER because that could someday conflict with the normal meaning.)
 	 * Likewise, for a CteScan, pretend the subquery's plan is INNER referent.
+	 * For a WorkTableScan, locate the parent RecursiveUnion plan node and use
+	 * that as INNER referent.
+	 *
 	 * For ON CONFLICT .. UPDATE we just need the inner tlist to point to the
 	 * excluded expression's tlist. (Similar to the SubqueryScan we don't want
 	 * to reuse OUTER, it's used for RETURNING in some modify table cases,
@@ -4868,6 +4881,9 @@ set_deparse_plan(deparse_namespace *dpns, Plan *plan)
 	else if (IsA(plan, CteScan))
 		dpns->inner_plan = list_nth(dpns->subplans,
 									((CteScan *) plan)->ctePlanId - 1);
+	else if (IsA(plan, WorkTableScan))
+		dpns->inner_plan = find_recursive_union(dpns,
+												(WorkTableScan *) plan);
 	else if (IsA(plan, ModifyTable))
 		dpns->inner_plan = plan;
 	else
@@ -4889,6 +4905,29 @@ set_deparse_plan(deparse_namespace *dpns, Plan *plan)
 		dpns->index_tlist = ((CustomScan *) plan)->custom_scan_tlist;
 	else
 		dpns->index_tlist = NIL;
+}
+
+/*
+ * Locate the ancestor plan node that is the RecursiveUnion generating
+ * the WorkTableScan's work table.  We can match on wtParam, since that
+ * should be unique within the plan tree.
+ */
+static Plan *
+find_recursive_union(deparse_namespace *dpns, WorkTableScan *wtscan)
+{
+	ListCell   *lc;
+
+	foreach(lc, dpns->ancestors)
+	{
+		Plan	   *ancestor = (Plan *) lfirst(lc);
+
+		if (IsA(ancestor, RecursiveUnion) &&
+			((RecursiveUnion *) ancestor)->wtParam == wtscan->wtParam)
+			return ancestor;
+	}
+	elog(ERROR, "could not find RecursiveUnion for WorkTableScan with wtParam %d",
+		 wtscan->wtParam);
+	return NULL;
 }
 
 /*
@@ -6941,7 +6980,7 @@ get_variable(Var *var, int levelsup, bool istoplevel, deparse_context *context)
 	AttrNumber	attnum;
 	int			netlevelsup;
 	deparse_namespace *dpns;
-	Index		varno;
+	int			varno;
 	AttrNumber	varattno;
 	deparse_columns *colinfo;
 	char	   *refname;
@@ -6987,7 +7026,7 @@ get_variable(Var *var, int levelsup, bool istoplevel, deparse_context *context)
 		 */
 		if (context->appendparents && dpns->appendrels)
 		{
-			Index		pvarno = varno;
+			int			pvarno = varno;
 			AttrNumber	pvarattno = varattno;
 			AppendRelInfo *appinfo = dpns->appendrels[pvarno];
 			bool		found = false;
@@ -7297,7 +7336,7 @@ get_name_for_var_field(Var *var, int fieldno,
 	AttrNumber	attnum;
 	int			netlevelsup;
 	deparse_namespace *dpns;
-	Index		varno;
+	int			varno;
 	AttrNumber	varattno;
 	TupleDesc	tupleDesc;
 	Node	   *expr;
@@ -7638,9 +7677,12 @@ get_name_for_var_field(Var *var, int fieldno,
 				{
 					/*
 					 * We're deparsing a Plan tree so we don't have a CTE
-					 * list.  But the only place we'd see a Var directly
-					 * referencing a CTE RTE is in a CteScan plan node, and we
-					 * can look into the subplan's tlist instead.
+					 * list.  But the only places we'd see a Var directly
+					 * referencing a CTE RTE are in CteScan or WorkTableScan
+					 * plan nodes.  For those cases, set_deparse_plan arranged
+					 * for dpns->inner_plan to be the plan node that emits the
+					 * CTE or RecursiveUnion result, and we can look at its
+					 * tlist instead.
 					 */
 					TargetEntry *tle;
 					deparse_namespace save_dpns;
@@ -7997,14 +8039,14 @@ isSimpleNode(Node *node, Node *parentNode, int prettyFlags)
 			 * appears simple since . has top precedence, unless parent is
 			 * T_FieldSelect itself!
 			 */
-			return (IsA(parentNode, FieldSelect) ? false : true);
+			return !IsA(parentNode, FieldSelect);
 
 		case T_FieldStore:
 
 			/*
 			 * treat like FieldSelect (probably doesn't matter)
 			 */
-			return (IsA(parentNode, FieldStore) ? false : true);
+			return !IsA(parentNode, FieldStore);
 
 		case T_CoerceToDomain:
 			/* maybe simple, check args */
@@ -10506,7 +10548,7 @@ get_tablefunc(TableFunc *tf, deparse_context *context, bool showimplicit)
 		forboth(lc1, tf->ns_uris, lc2, tf->ns_names)
 		{
 			Node	   *expr = (Node *) lfirst(lc1);
-			Value	   *ns_node = (Value *) lfirst(lc2);
+			String	   *ns_node = lfirst_node(String, lc2);
 
 			if (!first)
 				appendStringInfoString(buf, ", ");

@@ -45,9 +45,6 @@
 #include "utils/syscache.h"
 #include "utils/varlena.h"
 
-/* Same as MAXNUMMESSAGES in sinvaladt.c */
-#define MAX_RELCACHE_INVAL_MSGS 4096
-
 static List *OpenTableList(List *tables);
 static void CloseTableList(List *rels);
 static void PublicationAddTables(Oid pubid, List *rels, bool if_not_exists,
@@ -234,6 +231,11 @@ CreatePublication(ParseState *pstate, CreatePublicationStmt *stmt)
 		PublicationAddTables(puboid, rels, true, NULL);
 		CloseTableList(rels);
 	}
+	else if (stmt->for_all_tables)
+	{
+		/* Invalidate relcache so that publication info is rebuilt. */
+		CacheInvalidateRelcacheAll();
+	}
 
 	table_close(rel, RowExclusiveLock);
 
@@ -324,23 +326,7 @@ AlterPublicationOptions(ParseState *pstate, AlterPublicationStmt *stmt,
 		List	   *relids = GetPublicationRelations(pubform->oid,
 													 PUBLICATION_PART_ALL);
 
-		/*
-		 * We don't want to send too many individual messages, at some point
-		 * it's cheaper to just reset whole relcache.
-		 */
-		if (list_length(relids) < MAX_RELCACHE_INVAL_MSGS)
-		{
-			ListCell   *lc;
-
-			foreach(lc, relids)
-			{
-				Oid			relid = lfirst_oid(lc);
-
-				CacheInvalidateRelcacheByRelid(relid);
-			}
-		}
-		else
-			CacheInvalidateRelcacheAll();
+		InvalidatePublicationRels(relids);
 	}
 
 	ObjectAddressSet(obj, PublicationRelationId, pubform->oid);
@@ -348,6 +334,27 @@ AlterPublicationOptions(ParseState *pstate, AlterPublicationStmt *stmt,
 									 (Node *) stmt);
 
 	InvokeObjectPostAlterHook(PublicationRelationId, pubform->oid, 0);
+}
+
+/*
+ * Invalidate the relations.
+ */
+void
+InvalidatePublicationRels(List *relids)
+{
+	/*
+	 * We don't want to send too many individual messages, at some point it's
+	 * cheaper to just reset whole relcache.
+	 */
+	if (list_length(relids) < MAX_RELCACHE_INVAL_MSGS)
+	{
+		ListCell   *lc;
+
+		foreach(lc, relids)
+			CacheInvalidateRelcacheByRelid(lfirst_oid(lc));
+	}
+	else
+		CacheInvalidateRelcacheAll();
 }
 
 /*
@@ -393,21 +400,28 @@ AlterPublicationTables(AlterPublicationStmt *stmt, Relation rel,
 
 			foreach(newlc, rels)
 			{
-				Relation	newrel = (Relation) lfirst(newlc);
+				PublicationRelInfo *newpubrel;
 
-				if (RelationGetRelid(newrel) == oldrelid)
+				newpubrel = (PublicationRelInfo *) lfirst(newlc);
+				if (RelationGetRelid(newpubrel->relation) == oldrelid)
 				{
 					found = true;
 					break;
 				}
 			}
-
+			/* Not yet in the list, open it and add to the list */
 			if (!found)
 			{
-				Relation	oldrel = table_open(oldrelid,
-												ShareUpdateExclusiveLock);
+				Relation	oldrel;
+				PublicationRelInfo *pubrel;
 
-				delrels = lappend(delrels, oldrel);
+				/* Wrap relation into PublicationRelInfo */
+				oldrel = table_open(oldrelid, ShareUpdateExclusiveLock);
+
+				pubrel = palloc(sizeof(PublicationRelInfo));
+				pubrel->relation = oldrel;
+
+				delrels = lappend(delrels, pubrel);
 			}
 		}
 
@@ -476,6 +490,7 @@ RemovePublicationRelById(Oid proid)
 	Relation	rel;
 	HeapTuple	tup;
 	Form_pg_publication_rel pubrel;
+	List	   *relids = NIL;
 
 	rel = table_open(PublicationRelRelationId, RowExclusiveLock);
 
@@ -487,8 +502,18 @@ RemovePublicationRelById(Oid proid)
 
 	pubrel = (Form_pg_publication_rel) GETSTRUCT(tup);
 
-	/* Invalidate relcache so that publication info is rebuilt. */
-	CacheInvalidateRelcacheByRelid(pubrel->prrelid);
+	/*
+	 * Invalidate relcache so that publication info is rebuilt.
+	 *
+	 * For the partitioned tables, we must invalidate all partitions contained
+	 * in the respective partition hierarchies, not just the one explicitly
+	 * mentioned in the publication. This is required because we implicitly
+	 * publish the child tables when the parent table is published.
+	 */
+	relids = GetPubPartitionOptionRelations(relids, PUBLICATION_PART_ALL,
+											pubrel->prrelid);
+
+	InvalidatePublicationRels(relids);
 
 	CatalogTupleDelete(rel, &tup->t_self);
 
@@ -498,9 +523,38 @@ RemovePublicationRelById(Oid proid)
 }
 
 /*
- * Open relations specified by a RangeVar list.
- * The returned tables are locked in ShareUpdateExclusiveLock mode in order to
- * add them to a publication.
+ * Remove the publication by mapping OID.
+ */
+void
+RemovePublicationById(Oid pubid)
+{
+	Relation	rel;
+	HeapTuple	tup;
+	Form_pg_publication pubform;
+
+	rel = table_open(PublicationRelationId, RowExclusiveLock);
+
+	tup = SearchSysCache1(PUBLICATIONOID, ObjectIdGetDatum(pubid));
+	if (!HeapTupleIsValid(tup))
+		elog(ERROR, "cache lookup failed for publication %u", pubid);
+
+	pubform = (Form_pg_publication)GETSTRUCT(tup);
+
+	/* Invalidate relcache so that publication info is rebuilt. */
+	if (pubform->puballtables)
+		CacheInvalidateRelcacheAll();
+
+	CatalogTupleDelete(rel, &tup->t_self);
+
+	ReleaseSysCache(tup);
+
+	table_close(rel, RowExclusiveLock);
+}
+
+/*
+ * Open relations specified by a PublicationTable list.
+ * In the returned list of PublicationRelInfo, tables are locked
+ * in ShareUpdateExclusiveLock mode in order to add them to a publication.
  */
 static List *
 OpenTableList(List *tables)
@@ -514,15 +568,16 @@ OpenTableList(List *tables)
 	 */
 	foreach(lc, tables)
 	{
-		RangeVar   *rv = lfirst_node(RangeVar, lc);
-		bool		recurse = rv->inh;
+		PublicationTable *t = lfirst_node(PublicationTable, lc);
+		bool		recurse = t->relation->inh;
 		Relation	rel;
 		Oid			myrelid;
+		PublicationRelInfo *pub_rel;
 
 		/* Allow query cancel in case this takes a long time */
 		CHECK_FOR_INTERRUPTS();
 
-		rel = table_openrv(rv, ShareUpdateExclusiveLock);
+		rel = table_openrv(t->relation, ShareUpdateExclusiveLock);
 		myrelid = RelationGetRelid(rel);
 
 		/*
@@ -538,7 +593,9 @@ OpenTableList(List *tables)
 			continue;
 		}
 
-		rels = lappend(rels, rel);
+		pub_rel = palloc(sizeof(PublicationRelInfo));
+		pub_rel->relation = rel;
+		rels = lappend(rels, pub_rel);
 		relids = lappend_oid(relids, myrelid);
 
 		/*
@@ -571,7 +628,9 @@ OpenTableList(List *tables)
 
 				/* find_all_inheritors already got lock */
 				rel = table_open(childrelid, NoLock);
-				rels = lappend(rels, rel);
+				pub_rel = palloc(sizeof(PublicationRelInfo));
+				pub_rel->relation = rel;
+				rels = lappend(rels, pub_rel);
 				relids = lappend_oid(relids, childrelid);
 			}
 		}
@@ -592,9 +651,10 @@ CloseTableList(List *rels)
 
 	foreach(lc, rels)
 	{
-		Relation	rel = (Relation) lfirst(lc);
+		PublicationRelInfo *pub_rel;
 
-		table_close(rel, NoLock);
+		pub_rel = (PublicationRelInfo *) lfirst(lc);
+		table_close(pub_rel->relation, NoLock);
 	}
 }
 
@@ -611,7 +671,8 @@ PublicationAddTables(Oid pubid, List *rels, bool if_not_exists,
 
 	foreach(lc, rels)
 	{
-		Relation	rel = (Relation) lfirst(lc);
+		PublicationRelInfo *pub_rel = (PublicationRelInfo *) lfirst(lc);
+		Relation	rel = pub_rel->relation;
 		ObjectAddress obj;
 
 		/* Must be owner of the table or superuser. */
@@ -619,7 +680,7 @@ PublicationAddTables(Oid pubid, List *rels, bool if_not_exists,
 			aclcheck_error(ACLCHECK_NOT_OWNER, get_relkind_objtype(rel->rd_rel->relkind),
 						   RelationGetRelationName(rel));
 
-		obj = publication_add_relation(pubid, rel, if_not_exists);
+		obj = publication_add_relation(pubid, pub_rel, if_not_exists);
 		if (stmt)
 		{
 			EventTriggerCollectSimpleCommand(obj, InvalidObjectAddress,
@@ -643,7 +704,8 @@ PublicationDropTables(Oid pubid, List *rels, bool missing_ok)
 
 	foreach(lc, rels)
 	{
-		Relation	rel = (Relation) lfirst(lc);
+		PublicationRelInfo *pubrel = (PublicationRelInfo *) lfirst(lc);
+		Relation	rel = pubrel->relation;
 		Oid			relid = RelationGetRelid(rel);
 
 		prid = GetSysCacheOid2(PUBLICATIONRELMAP, Anum_pg_publication_rel_oid,

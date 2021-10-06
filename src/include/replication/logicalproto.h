@@ -65,7 +65,7 @@ typedef enum LogicalRepMsgType
 	LOGICAL_REP_MSG_COMMIT_PREPARED = 'K',
 	LOGICAL_REP_MSG_ROLLBACK_PREPARED = 'r',
 	LOGICAL_REP_MSG_STREAM_START = 'S',
-	LOGICAL_REP_MSG_STREAM_END = 'E',
+	LOGICAL_REP_MSG_STREAM_STOP = 'E',
 	LOGICAL_REP_MSG_STREAM_COMMIT = 'c',
 	LOGICAL_REP_MSG_STREAM_ABORT = 'A',
 	LOGICAL_REP_MSG_STREAM_PREPARE = 'p'
@@ -246,5 +246,6 @@ extern void logicalrep_write_stream_abort(StringInfo out, TransactionId xid,
 										  TransactionId subxid);
 extern void logicalrep_read_stream_abort(StringInfo in, TransactionId *xid,
 										 TransactionId *subxid);
+extern char *logicalrep_message_type(LogicalRepMsgType action);
 
 #endif							/* LOGICAL_PROTO_H */
