@@ -881,6 +881,14 @@ EOF
 		chdir('../../..');
 	}
 
+	if (IsNewer(
+			'src/include/nodes/nodetags.h',
+			'src/backend/nodes/nodetags.h'))
+	{
+		copyFile('src/backend/nodes/nodetags.h',
+			'src/include/nodes/nodetags.h');
+	}
+
 	open(my $o, '>', "doc/src/sgml/version.sgml")
 	  || croak "Could not write to version.sgml\n";
 	print $o <<EOF;
