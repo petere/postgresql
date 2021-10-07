@@ -870,9 +870,10 @@ EOF
 			utils/mmgr/slab.c
 		);
 
-		my @node_files = (map { "src/include/$_" } @node_headers, map { "src/backend/$_" } @node_sources);
-
 		chdir('src/backend/nodes');
+
+		my @node_files = (map { "../../../src/include/$_" } @node_headers, map { "../../../src/backend/$_" } @node_sources);
+
 		print STDERR "DEBUG: perl gen_node_stuff.pl @node_files", "\n";
 		system("perl gen_node_stuff.pl @node_files");
 		open(my $f, '>', 'node-stuff-stamp') || confess "Could not touch node-stuff-stamp";
