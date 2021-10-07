@@ -862,7 +862,7 @@ EOF
 			access/sdir.h
 		);
 
-		@node_sources = qw(
+		my @node_sources = qw(
 			executor/nodeWindowAgg.c
 			nodes/tidbitmap.c
 			utils/mmgr/aset.c
