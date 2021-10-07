@@ -835,6 +835,51 @@ EOF
 		close($chs);
 	}
 
+	if (IsNewer('src/backend/nodes/node-stuff-stamp',
+		'src/backend/nodes/gen_node_stuff.pl'))
+	{
+		my @node_headers = qw(
+			nodes/nodes.h
+			nodes/execnodes.h
+			nodes/plannodes.h
+			nodes/primnodes.h
+			nodes/pathnodes.h
+			nodes/memnodes.h
+			nodes/extensible.h
+			nodes/parsenodes.h
+			nodes/replnodes.h
+			nodes/value.h
+			commands/trigger.h
+			commands/event_trigger.h
+			foreign/fdwapi.h
+			access/amapi.h
+			access/tableam.h
+			access/tsmapi.h
+			utils/rel.h
+			nodes/supportnodes.h
+			executor/tuptable.h
+			nodes/lockoptions.h
+			access/sdir.h
+		);
+
+		@node_sources = qw(
+			executor/nodeWindowAgg.c
+			nodes/tidbitmap.c
+			utils/mmgr/aset.c
+			utils/mmgr/generation.c
+			utils/mmgr/slab.c
+		);
+
+		my @node_files = (map { "src/include/$_" } @node_headers, map { "src/backend/$_" } @node_sources);
+
+		chdir('src/backend/nodes');
+		print STDERR "DEBUG: perl gen_node_stuff.pl @node_files", "\n";
+		system("perl gen_node_stuff.pl @node_files");
+		open(my $f, '>', 'node-stuff-stamp') || confess "Could not touch node-stuff-stamp";
+		close($f);
+		chdir('../../..');
+	}
+
 	open(my $o, '>', "doc/src/sgml/version.sgml")
 	  || croak "Could not write to version.sgml\n";
 	print $o <<EOF;
