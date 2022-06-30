@@ -19,7 +19,7 @@ m4_pattern_forbid(^PGAC_)dnl to catch undefined macros
 
 AC_INIT([PostgreSQL], [16devel], [pgsql-bugs@lists.postgresql.org], [], [https://www.postgresql.org/])
 
-m4_if(m4_defn([m4_PACKAGE_VERSION]), [2.69], [], [m4_fatal([Autoconf version 2.69 is required.
+m4_if(m4_defn([m4_PACKAGE_VERSION]), [2.71], [], [m4_fatal([Autoconf version 2.71 is required.
 Untested combinations of 'autoconf' and PostgreSQL versions are not
 recommended.  You can remove the check from 'configure.ac' but it is then
 your responsibility whether the result works or not.])])
@@ -358,7 +358,6 @@ case $template in
 esac
 
 AC_PROG_CC([$pgac_cc_list])
-AC_PROG_CC_C99()
 
 # Error out if the compiler does not support C99, as the codebase
 # relies on that.
@@ -1628,7 +1627,6 @@ fi
 ## Types, structures, compiler characteristics
 ##
 
-m4_defun([AC_PROG_CC_STDC], []) dnl We don't want that.
 AC_C_BIGENDIAN
 AC_C_INLINE
 PGAC_PRINTF_ARCHETYPE
