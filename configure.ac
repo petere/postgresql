@@ -1436,7 +1436,7 @@ AC_SUBST(UUID_LIBS)
 
 AC_HEADER_STDBOOL
 
-AC_CHECK_HEADERS(m4_normalize([
+AC_CHECK_HEADERS([
 	atomic.h
 	copyfile.h
 	execinfo.h
@@ -1464,7 +1464,7 @@ AC_CHECK_HEADERS(m4_normalize([
 	termios.h
 	ucred.h
 	wctype.h
-]))
+])
 
 # On BSD, test for net/if.h will fail unless sys/socket.h
 # is included first.
@@ -1779,7 +1779,7 @@ PGAC_FUNC_WCSTOMBS_L
 LIBS_including_readline="$LIBS"
 LIBS=`echo "$LIBS" | sed -e 's/-ledit//g' -e 's/-lreadline//g'`
 
-AC_CHECK_FUNCS(m4_normalize([
+AC_CHECK_FUNCS([
 	backtrace_symbols
 	clock_gettime
 	copyfile
@@ -1810,7 +1810,7 @@ AC_CHECK_FUNCS(m4_normalize([
 	uselocale
 	wcstombs_l
 	writev
-]))
+])
 
 # These typically are compiler builtins, for which AC_CHECK_FUNCS fails.
 PGAC_CHECK_BUILTIN_FUNC([__builtin_bswap16], [int x])
@@ -1896,7 +1896,7 @@ if test "$pgac_cv_var_PS_STRINGS" = yes ; then
   AC_DEFINE([HAVE_PS_STRINGS], 1, [Define to 1 if the PS_STRINGS thing exists.])
 fi
 
-AC_REPLACE_FUNCS(m4_normalize([
+AC_REPLACE_FUNCS([
 	dlopen
 	explicit_bzero
 	fls
@@ -1912,7 +1912,7 @@ AC_REPLACE_FUNCS(m4_normalize([
 	strlcpy
 	strnlen
 	strtof
-]))
+])
 
 if test "$enable_thread_safety" = yes; then
   AC_REPLACE_FUNCS(pthread_barrier_wait)
@@ -2052,14 +2052,14 @@ LIBS="$LIBS_including_readline"
 
 if test "$with_readline" = yes; then
   PGAC_READLINE_VARIABLES
-  AC_CHECK_FUNCS(m4_normalize([
+  AC_CHECK_FUNCS([
 	append_history
 	history_truncate_file
 	rl_completion_matches
 	rl_filename_completion_function
 	rl_reset_screen_size
 	rl_variable_bind
-  ]))
+  ])
 fi
 
 
