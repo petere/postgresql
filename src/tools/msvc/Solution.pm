@@ -449,7 +449,7 @@ sub GenerateFiles
 		HAVE__CONFIGTHREADLOCALE                 => 1,
 		HAVE__CPUID                              => 1,
 		HAVE__GET_CPUID                          => undef,
-		HAVE__STATIC_ASSERT                      => undef,
+		HAVE__STATIC_ASSERT                      => 1,
 		HAVE___STRTOLL                           => undef,
 		HAVE___STRTOULL                          => undef,
 		INT64_MODIFIER                           => qq{"ll"},
