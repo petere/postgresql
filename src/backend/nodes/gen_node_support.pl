@@ -908,12 +908,21 @@ printf $rfs $header_comment, 'readfuncs.switch.c';
 print $off $node_includes;
 print $rff $node_includes;
 
+my $count = 0;
 foreach my $n (@node_types)
 {
 	next if elem $n, @abstract_types;
 	next if elem $n, @nodetag_only;
 	next if elem $n, @no_read_write;
 	next if elem $n, @special_read_write;
+
+	# XXX For now, skip all "Stmt"s except that ones that were there before.
+	if ($n =~ /Stmt$/)
+	{
+		my @keep =
+		  qw(AlterStatsStmt CreateForeignTableStmt CreateStatsStmt CreateStmt DeclareCursorStmt ImportForeignSchemaStmt IndexStmt NotifyStmt PlannedStmt PLAssignStmt RawStmt ReturnStmt SelectStmt SetOperationStmt  InsertStmt DeleteStmt UpdateStmt MergeStmt CreateForeignServerStmt AlterForeignServerStmt);
+		next unless elem $n, @keep;
+	}
 
 	my $no_read = (elem $n, @no_read);
 
@@ -928,6 +937,7 @@ foreach my $n (@node_types)
 	  . length($N) . "))\n"
 	  . "\t\treturn_value = _read${n}();\n"
 	  unless $no_read;
+	$count++;
 
 	next if elem $n, @custom_read_write;
 
@@ -1236,6 +1246,8 @@ _read${n}(void)
 }
 " unless $no_read;
 }
+
+print STDERR "readfuncs: $count\n";
 
 close $off;
 close $rff;
