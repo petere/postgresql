@@ -119,6 +119,8 @@ scram_init(PGconn *conn,
 		return NULL;
 	}
 
+	if (password)
+	{
 	/* Normalize the password with SASLprep, if possible */
 	rc = pg_saslprep(password, &prep_password);
 	if (rc == SASLPREP_OOM)
@@ -138,6 +140,7 @@ scram_init(PGconn *conn,
 		}
 	}
 	state->password = prep_password;
+	}
 
 	return state;
 }
@@ -775,6 +778,12 @@ calculate_client_proof(fe_scram_state *state,
 		return false;
 	}
 
+	if (state->conn->scram_client_key_binary)
+	{
+		memcpy(ClientKey, state->conn->scram_client_key_binary, SCRAM_MAX_KEY_LEN);
+	}
+	else
+	{
 	/*
 	 * Calculate SaltedPassword, and store it in 'state' so that we can reuse
 	 * it later in verify_server_signature.
@@ -791,6 +800,7 @@ calculate_client_proof(fe_scram_state *state,
 		/* errstr is already filled here */
 		pg_hmac_free(ctx);
 		return false;
+	}
 	}
 
 	if (pg_hmac_init(ctx, StoredKey, state->key_length) < 0 ||
@@ -841,12 +851,19 @@ verify_server_signature(fe_scram_state *state, bool *match,
 		return false;
 	}
 
+	if (state->conn->scram_server_key_binary)
+	{
+		memcpy(ServerKey, state->conn->scram_server_key_binary, SCRAM_MAX_KEY_LEN);
+	}
+	else
+	{
 	if (scram_ServerKey(state->SaltedPassword, state->hash_type,
 						state->key_length, ServerKey, errstr) < 0)
 	{
 		/* errstr is filled already */
 		pg_hmac_free(ctx);
 		return false;
+	}
 	}
 
 	/* calculate ServerSignature */

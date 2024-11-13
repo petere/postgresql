@@ -22,6 +22,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "common/base64.h"
 #include "common/ip.h"
 #include "common/link-canary.h"
 #include "common/scram-common.h"
@@ -364,6 +365,12 @@ static const internalPQconninfoOption PQconninfoOptions[] = {
 		DefaultLoadBalanceHosts, NULL,
 		"Load-Balance-Hosts", "", 8,	/* sizeof("disable") = 8 */
 	offsetof(struct pg_conn, load_balance_hosts)},
+
+	{"scram_client_key", NULL, NULL, NULL, "SCRAM-Client-Key", "D", SCRAM_MAX_KEY_LEN * 2,
+	offsetof(struct pg_conn, scram_client_key)},
+
+	{"scram_server_key", NULL, NULL, NULL, "SCRAM-Server-Key", "D", SCRAM_MAX_KEY_LEN * 2,
+	offsetof(struct pg_conn, scram_server_key)},
 
 	/* Terminating entry --- MUST BE LAST */
 	{NULL, NULL, NULL, NULL,
@@ -1791,6 +1798,28 @@ pqConnectOptions2(PGconn *conn)
 	}
 	else
 		conn->target_server_type = SERVER_TYPE_ANY;
+
+	if (conn->scram_client_key)
+	{
+		int			len;
+
+		len = pg_b64_dec_len(strlen(conn->scram_client_key));
+		conn->scram_client_key_len = len;
+		conn->scram_client_key_binary = malloc(len);
+		pg_b64_decode(conn->scram_client_key, strlen(conn->scram_client_key),
+					  conn->scram_client_key_binary, len);
+	}
+
+	if (conn->scram_server_key)
+	{
+		int			len;
+
+		len = pg_b64_dec_len(strlen(conn->scram_server_key));
+		conn->scram_server_key_len = len;
+		conn->scram_server_key_binary = malloc(len);
+		pg_b64_decode(conn->scram_server_key, strlen(conn->scram_server_key),
+					  conn->scram_server_key_binary, len);
+	}
 
 	/*
 	 * validate load_balance_hosts option, and set load_balance_type
@@ -4703,6 +4732,8 @@ freePGconn(PGconn *conn)
 	free(conn->rowBuf);
 	free(conn->target_session_attrs);
 	free(conn->load_balance_hosts);
+	free(conn->scram_client_key);
+	free(conn->scram_server_key);
 	termPQExpBuffer(&conn->errorMessage);
 	termPQExpBuffer(&conn->workBuffer);
 

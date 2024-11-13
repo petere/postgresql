@@ -19,6 +19,7 @@
 #include "access/xact.h"
 #include "catalog/pg_user_mapping.h"
 #include "commands/defrem.h"
+#include "common/base64.h"
 #include "funcapi.h"
 #include "libpq/libpq-be.h"
 #include "libpq/libpq-be-fe-helpers.h"
@@ -168,6 +169,7 @@ static void pgfdw_finish_abort_cleanup(List *pending_entries,
 static void pgfdw_security_check(const char **keywords, const char **values,
 								 UserMapping *user, PGconn *conn);
 static bool UserMappingPasswordRequired(UserMapping *user);
+static bool UseScramPassthrough(ForeignServer *server, UserMapping *user);
 static bool disconnect_cached_connections(Oid serverid);
 static void postgres_fdw_get_connections_internal(FunctionCallInfo fcinfo,
 												  enum pgfdwVersion api_version);
@@ -476,7 +478,7 @@ connect_pg_server(ForeignServer *server, UserMapping *user)
 		 * for application_name, fallback_application_name, client_encoding,
 		 * end marker.
 		 */
-		n = list_length(server->options) + list_length(user->options) + 4;
+		n = list_length(server->options) + list_length(user->options) + 4 + 2;
 		keywords = (const char **) palloc(n * sizeof(char *));
 		values = (const char **) palloc(n * sizeof(char *));
 
@@ -544,6 +546,27 @@ connect_pg_server(ForeignServer *server, UserMapping *user)
 		keywords[n] = "client_encoding";
 		values[n] = GetDatabaseEncodingName();
 		n++;
+
+		if (MyProcPort->has_scram_keys && UseScramPassthrough(server, user))
+		{
+			int			len;
+
+			keywords[n] = "scram_client_key";
+			len = pg_b64_enc_len(sizeof(MyProcPort->scram_ClientKey));
+			values[n] = palloc0(len);
+			pg_b64_encode((const char *) MyProcPort->scram_ClientKey,
+						  sizeof(MyProcPort->scram_ClientKey),
+						  (char *) values[n], len);
+			n++;
+
+			keywords[n] = "scram_server_key";
+			len = pg_b64_enc_len(sizeof(MyProcPort->scram_ServerKey));
+			values[n] = palloc0(len);
+			pg_b64_encode((const char *) MyProcPort->scram_ServerKey,
+						  sizeof(MyProcPort->scram_ServerKey),
+						  (char *) values[n], len);
+			n++;
+		}
 
 		keywords[n] = values[n] = NULL;
 
@@ -618,6 +641,30 @@ UserMappingPasswordRequired(UserMapping *user)
 	}
 
 	return true;
+}
+
+static bool
+UseScramPassthrough(ForeignServer *server, UserMapping *user)
+{
+	ListCell   *cell;
+
+	foreach(cell, server->options)
+	{
+		DefElem    *def = (DefElem *) lfirst(cell);
+
+		if (strcmp(def->defname, "use_scram_passthrough") == 0)
+			return defGetBoolean(def);
+	}
+
+	foreach(cell, user->options)
+	{
+		DefElem    *def = (DefElem *) lfirst(cell);
+
+		if (strcmp(def->defname, "use_scram_passthrough") == 0)
+			return defGetBoolean(def);
+	}
+
+	return false;
 }
 
 /*
