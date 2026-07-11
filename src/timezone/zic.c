@@ -346,19 +346,12 @@ enum
 
 /*
  * The maximum number of fields on any of the above lines.
- * (The "+"s pacify gcc -Wenum-compare.)
+ * (The casts pacify gcc -Wenum-compare.)
  */
 enum
 {
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable: 5287)
-#endif
-	MAX_FIELDS = max(max(+RULE_FIELDS, +LINK_FIELDS),
-					 max(+LEAP_FIELDS, +EXPIRES_FIELDS))
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
+	MAX_FIELDS = max(max((int) RULE_FIELDS, (int) LINK_FIELDS),
+					 max((int) LEAP_FIELDS, (int) EXPIRES_FIELDS))
 };
 
 /*
