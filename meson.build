@@ -2317,6 +2317,7 @@ if cc.get_id() == 'msvc'
 
     # Warnings to disable:
     # from /W2:
+    '/wd4146', # unary minus operator applied to unsigned type, result still unsigned
     '/wd4244', # conversion from 'type1' to 'type2', possible loss of data
 
     # Additional warnings to enable:
