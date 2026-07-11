@@ -350,8 +350,15 @@ enum
  */
 enum
 {
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 5287)
+#endif
 	MAX_FIELDS = max(max(+RULE_FIELDS, +LINK_FIELDS),
 					 max(+LEAP_FIELDS, +EXPIRES_FIELDS))
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 };
 
 /*
@@ -1651,7 +1658,14 @@ random_dirent(char const **name, char **namealloc)
 	 * value of ((UINTMAX_MAX + 1) - (UINTMAX_MAX + 1) % BASE**6) computed
 	 * without overflow.
 	 */
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4146)
+#endif
 	uint_fast64_t unfair_min = -((UINTMAX_MAX % base__6 + 1) % base__6);
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 	if (!dst)
 	{
