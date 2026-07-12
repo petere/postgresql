@@ -2338,7 +2338,7 @@ if cc.get_id() == 'msvc'
     # from /W3:
     '/wd4018', # signed/unsigned mismatch
     '/wd4101', # unreferenced local variable [like -Wunused-variable, but there is no "unused" attribute, so too noisy]
-    '/wd4267', # conversion from 'size_t' to 'type', possible loss of data
+    '/w24267', # conversion from 'size_t' to 'type', possible loss of data XXX
 
     # Additional warnings to enable:
     '/w24255', # 'function' : no function prototype given: converting '()' to '(void)' [like -Wstrict-prototypes]
