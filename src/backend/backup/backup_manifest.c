@@ -104,7 +104,7 @@ AddFileToBackupManifest(backup_manifest_info *manifest, Oid spcoid,
 						pg_checksum_context *checksum_ctx)
 {
 	char		pathbuf[MAXPGPATH];
-	int			pathlen;
+	size_t		pathlen;
 	StringInfoData buf;
 
 	if (!IsManifestEnabled(manifest))
@@ -383,7 +383,7 @@ SendBackupManifest(backup_manifest_info *manifest, bbsink *sink)
 static void
 AppendStringToManifest(backup_manifest_info *manifest, const char *s)
 {
-	int			len = strlen(s);
+	size_t		len = strlen(s);
 
 	Assert(manifest != NULL);
 	if (manifest->still_checksumming)

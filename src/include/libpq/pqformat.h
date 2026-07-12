@@ -107,7 +107,7 @@ pq_writeint64(StringInfoData *pg_restrict buf, uint64 i)
 static inline void
 pq_writestring(StringInfoData *pg_restrict buf, const char *pg_restrict str)
 {
-	int			slen = strlen(str);
+	size_t		slen = strlen(str);
 	char	   *p;
 
 	p = pg_server_to_client(str, slen);
