@@ -163,8 +163,8 @@ static pg_always_inline bool NextCopyFromRawFieldsInternal(CopyFromState cstate,
 
 
 /* Low-level communications functions */
-static int	CopyGetData(CopyFromState cstate, void *databuf,
-						int minread, int maxread);
+static size_t CopyGetData(CopyFromState cstate, void *databuf,
+						  size_t minread, size_t maxread);
 static inline bool CopyGetInt32(CopyFromState cstate, int32 *val);
 static inline bool CopyGetInt16(CopyFromState cstate, int16 *val);
 static void CopyLoadInputBuf(CopyFromState cstate);
@@ -245,10 +245,10 @@ ReceiveCopyBinaryHeader(CopyFromState cstate)
  *
  * NB: no data conversion is applied here.
  */
-static int
-CopyGetData(CopyFromState cstate, void *databuf, int minread, int maxread)
+static size_t
+CopyGetData(CopyFromState cstate, void *databuf, size_t minread, size_t maxread)
 {
-	int			bytesread = 0;
+	size_t		bytesread = 0;
 
 	switch (cstate->copy_src)
 	{
@@ -1261,7 +1261,7 @@ CopyReadLine(CopyFromState cstate, bool is_csv)
 		 */
 		if (cstate->copy_src == COPY_FRONTEND)
 		{
-			int			inbytes;
+			size_t		inbytes;
 
 			do
 			{

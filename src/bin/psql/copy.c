@@ -557,7 +557,7 @@ handleCopyIn(PGconn *conn, FILE *copystream, bool isbinary, PGresult **res)
 
 		for (;;)
 		{
-			int			buflen;
+			size_t		buflen;
 
 			/* enable longjmp while waiting for input */
 			sigint_interrupt_enabled = true;

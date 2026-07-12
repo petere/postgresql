@@ -39,7 +39,7 @@ main(int argc, char **argv)
 	JsonParseErrorType result;
 	JsonLexContext *lex;
 	StringInfoData json;
-	int			n_read;
+	size_t		n_read;
 	int			iter;
 	int			use_inc = 0;
 
