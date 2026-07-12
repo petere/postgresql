@@ -1261,7 +1261,7 @@ heap_deform_tuple(HeapTuple tuple, TupleDesc tupleDesc,
 	int			natts;			/* number of atts to extract */
 	int			attnum;
 	char	   *tp;				/* ptr to tuple data */
-	uint32		off;			/* offset in tuple data */
+	size_t		off;			/* offset in tuple data */
 	uint8	   *bp = tup->t_bits;	/* ptr to null bitmap in tuple */
 	int			firstNonCacheOffsetAttr;
 	int			firstNullAttr;

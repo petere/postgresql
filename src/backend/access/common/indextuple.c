@@ -391,7 +391,7 @@ index_deform_tuple_internal(TupleDesc tupleDescriptor,
 	CompactAttribute *cattr;
 	int			natts = tupleDescriptor->natts; /* number of atts to extract */
 	int			attnum = 0;
-	uint32		off = 0;		/* offset in tuple data */
+	size_t		off = 0;		/* offset in tuple data */
 	int			firstNonCacheOffsetAttr;
 	int			firstNullAttr;
 

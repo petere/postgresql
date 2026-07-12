@@ -169,7 +169,7 @@ fetch_att_noerr(const void *T, bool attbyval, int attlen)
  * attbyval, attlen and attalignby are values from CompactAttribute.
  */
 static inline Datum
-align_fetch_then_add(const char *tupptr, uint32 *off, bool attbyval, int attlen,
+align_fetch_then_add(const char *tupptr, size_t *off, bool attbyval, int attlen,
 					 uint8 attalignby)
 {
 	Datum		res;

@@ -72,7 +72,7 @@
 
 static TupleDesc ExecTypeFromTLInternal(List *targetList,
 										bool skipjunk);
-static pg_always_inline void slot_deform_heap_tuple(TupleTableSlot *slot, HeapTuple tuple, uint32 *offp,
+static pg_always_inline void slot_deform_heap_tuple(TupleTableSlot *slot, HeapTuple tuple, size_t *offp,
 													int reqnatts, bool support_cstring);
 static inline void tts_buffer_heap_store_tuple(TupleTableSlot *slot,
 											   HeapTuple tuple,
@@ -1014,7 +1014,7 @@ tts_buffer_heap_store_tuple(TupleTableSlot *slot, HeapTuple tuple,
  * cstrings can exist in MinimalTuples, but not in HeapTuples.
  */
 static pg_always_inline void
-slot_deform_heap_tuple(TupleTableSlot *slot, HeapTuple tuple, uint32 *offp,
+slot_deform_heap_tuple(TupleTableSlot *slot, HeapTuple tuple, size_t *offp,
 					   int reqnatts, bool support_cstring)
 {
 	CompactAttribute *cattrs;
@@ -1029,7 +1029,7 @@ slot_deform_heap_tuple(TupleTableSlot *slot, HeapTuple tuple, uint32 *offp,
 	Datum	   *values;
 	bool	   *isnull;
 	char	   *tp;				/* ptr to tuple data */
-	uint32		off;			/* offset in tuple data */
+	size_t		off;			/* offset in tuple data */
 
 	/* Did someone forget to call TupleDescFinalize()? */
 	Assert(tupleDesc->firstNonCachedOffsetAttr >= 0);

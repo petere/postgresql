@@ -278,7 +278,7 @@ typedef struct HeapTupleTableSlot
 #define FIELDNO_HEAPTUPLETABLESLOT_TUPLE 1
 	HeapTuple	tuple;			/* physical tuple */
 #define FIELDNO_HEAPTUPLETABLESLOT_OFF 2
-	uint32		off;			/* saved state for slot_deform_heap_tuple */
+	size_t		off;			/* saved state for slot_deform_heap_tuple */
 	HeapTupleData tupdata;		/* optional workspace for storing tuple */
 } HeapTupleTableSlot;
 
@@ -316,7 +316,7 @@ typedef struct MinimalTupleTableSlot
 	MinimalTuple mintuple;		/* minimal tuple, or NULL if none */
 	HeapTupleData minhdr;		/* workspace for minimal-tuple-only case */
 #define FIELDNO_MINIMALTUPLETABLESLOT_OFF 4
-	uint32		off;			/* saved state for slot_deform_heap_tuple */
+	size_t		off;			/* saved state for slot_deform_heap_tuple */
 } MinimalTupleTableSlot;
 
 /*
