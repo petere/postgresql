@@ -160,7 +160,7 @@ tarCreateHeader(char *h, const char *filename, const char *linktarget,
 		 * indicated in the tar format by adding a slash at the end of the
 		 * name, the same as for regular directories.
 		 */
-		int			flen = strlen(filename);
+		size_t		flen = strlen(filename);
 
 		flen = Min(flen, 99);
 		h[flen] = '/';

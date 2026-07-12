@@ -480,9 +480,9 @@ unicode_category_abbrev(pg_unicode_category category)
 static bool
 range_search(const pg_unicode_range *tbl, size_t size, char32_t code)
 {
-	int			min = 0;
-	int			mid;
-	int			max = size - 1;
+	size_t		min = 0;
+	size_t		mid;
+	size_t		max = size - 1;
 
 	Assert(code <= 0x10ffff);
 

@@ -417,10 +417,10 @@ parse_filename_for_nontemp_relation(const char *name, RelFileNumber *relnumber,
 		f = MAIN_FORKNUM;
 	else
 	{
-		int			forkchar;
+		size_t		forkchar;
 
 		forkchar = forkname_chars(name + 1, &f);
-		if (forkchar <= 0)
+		if (forkchar == 0)
 			return false;
 		name += forkchar + 1;
 	}

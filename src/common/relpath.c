@@ -77,14 +77,14 @@ forkname_to_number(const char *forkName)
  * Note that the present coding assumes that there are no fork names which
  * are prefixes of other fork names.
  */
-int
+size_t
 forkname_chars(const char *str, ForkNumber *fork)
 {
 	ForkNumber	forkNum;
 
 	for (forkNum = 1; forkNum <= MAX_FORKNUM; forkNum++)
 	{
-		int			len = strlen(forkNames[forkNum]);
+		size_t		len = strlen(forkNames[forkNum]);
 
 		if (strncmp(forkNames[forkNum], str, len) == 0)
 		{

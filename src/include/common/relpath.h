@@ -75,7 +75,7 @@ typedef enum ForkNumber
 extern PGDLLIMPORT const char *const forkNames[];
 
 extern ForkNumber forkname_to_number(const char *forkName);
-extern int	forkname_chars(const char *str, ForkNumber *fork);
+extern size_t forkname_chars(const char *str, ForkNumber *fork);
 
 
 /*

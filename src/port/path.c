@@ -653,7 +653,7 @@ path_is_safe_for_extraction(const char *path)
 bool
 path_is_prefix_of_path(const char *path1, const char *path2)
 {
-	int			path1_len = strlen(path1);
+	size_t		path1_len = strlen(path1);
 
 	if (strncmp(path1, path2, path1_len) == 0 &&
 		(IS_DIR_SEP(path2[path1_len]) || path2[path1_len] == '\0'))
@@ -755,17 +755,16 @@ static void
 make_relative_path(char *ret_path, const char *target_path,
 				   const char *bin_path, const char *my_exec_path)
 {
-	int			prefix_len;
-	int			tail_start;
-	int			tail_len;
-	int			i;
+	size_t		prefix_len;
+	size_t		tail_start;
+	size_t		tail_len;
 
 	/*
 	 * Determine the common prefix --- note we require it to end on a
 	 * directory separator, consider eg '/usr/lib' and '/usr/libexec'.
 	 */
 	prefix_len = 0;
-	for (i = 0; target_path[i] && bin_path[i]; i++)
+	for (size_t i = 0; target_path[i] && bin_path[i]; i++)
 	{
 		if (IS_DIR_SEP(target_path[i]) && IS_DIR_SEP(bin_path[i]))
 			prefix_len = i + 1;
@@ -787,7 +786,7 @@ make_relative_path(char *ret_path, const char *target_path,
 	/*
 	 * Tail match?
 	 */
-	tail_start = (int) strlen(ret_path) - tail_len;
+	tail_start = strlen(ret_path) - tail_len;
 	if (tail_start > 0 &&
 		IS_DIR_SEP(ret_path[tail_start - 1]) &&
 		dir_strcmp(ret_path + tail_start, bin_path + prefix_len) == 0)

@@ -150,10 +150,10 @@ pg_is_ascii(const char *str)
  * The passed in string must be zero-terminated.  This function returns
  * the new length of the string.
  */
-int
+size_t
 pg_strip_crlf(char *str)
 {
-	int			len = strlen(str);
+	size_t		len = strlen(str);
 
 	while (len > 0 && (str[len - 1] == '\n' ||
 					   str[len - 1] == '\r'))

@@ -8125,7 +8125,7 @@ passwordFromFile(const char *hostname, const char *port,
 		if (buf.data[0] != '#')
 		{
 			char	   *t = buf.data;
-			int			len;
+			size_t		len;
 
 			/* strip trailing newline and carriage return */
 			len = pg_strip_crlf(t);

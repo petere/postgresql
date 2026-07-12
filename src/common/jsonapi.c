@@ -143,7 +143,7 @@ enum JsonParserSem
  */
 struct JsonParserStack
 {
-	int			stack_size;
+	size_t		stack_size;
 	char	   *prediction;
 	size_t		pred_index;
 	/* these two are indexed by lex_level */

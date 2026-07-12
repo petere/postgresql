@@ -32,7 +32,7 @@
 char *
 escape_single_quotes_ascii(const char *src)
 {
-	int			len = strlen(src),
+	size_t		len = strlen(src),
 				i,
 				j;
 	char	   *result = malloc(len * 2 + 1);

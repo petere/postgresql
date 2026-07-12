@@ -816,7 +816,7 @@ appendPsqlMetaConnect(PQExpBuffer buf, const char *dbname)
 bool
 parsePGArray(const char *atext, char ***itemarray, int *nitems)
 {
-	int			inputlen;
+	size_t		inputlen;
 	char	  **items;
 	char	   *strings;
 	int			curitem;

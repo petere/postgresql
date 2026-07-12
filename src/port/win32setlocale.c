@@ -146,10 +146,10 @@ map_locale(const struct locale_map *map, const char *locale)
 		if (match_start)
 		{
 			/* Found a match. Replace the matched string. */
-			int			matchpos = match_start - locale;
-			int			replacementlen = strlen(replacement);
+			ptrdiff_t	matchpos = match_start - locale;
+			size_t		replacementlen = strlen(replacement);
 			const char *rest = match_end;
-			int			restlen = strlen(rest);
+			size_t		restlen = strlen(rest);
 
 			/* check that the result fits in the static buffer */
 			if (matchpos + replacementlen + restlen + 1 > MAX_LOCALE_NAME_LEN)

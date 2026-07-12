@@ -85,13 +85,13 @@ static const struct lconv_member_info table[] = {
 };
 
 static inline char **
-lconv_string_member(struct lconv *lconv, int i)
+lconv_string_member(struct lconv *lconv, size_t i)
 {
 	return (char **) ((char *) lconv + table[i].offset);
 }
 
 static inline char *
-lconv_char_member(struct lconv *lconv, int i)
+lconv_char_member(struct lconv *lconv, size_t i)
 {
 	return (char *) lconv + table[i].offset;
 }

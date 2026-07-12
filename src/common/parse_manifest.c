@@ -118,7 +118,7 @@ pg_noreturn static void json_manifest_parse_failure(JsonManifestParseContext *co
 													char *msg);
 
 static int	hexdecode_char(char c);
-static bool hexdecode_string(uint8 *result, char *input, int nbytes);
+static bool hexdecode_string(uint8 *result, const char *input, size_t nbytes);
 static bool parse_xlogrecptr(XLogRecPtr *result, char *input);
 
 /*
@@ -651,7 +651,7 @@ json_manifest_finalize_file(JsonManifestParseState *parse)
 	JsonManifestParseContext *context = parse->context;
 	uint64		size;
 	char	   *ep;
-	int			checksum_string_length;
+	size_t		checksum_string_length;
 	pg_checksum_type checksum_type;
 	int			checksum_length;
 	uint8	   *checksum_payload;
@@ -671,8 +671,8 @@ json_manifest_finalize_file(JsonManifestParseState *parse)
 	/* Decode encoded pathname, if that's what we have. */
 	if (parse->encoded_pathname != NULL)
 	{
-		int			encoded_length = strlen(parse->encoded_pathname);
-		int			raw_length = encoded_length / 2;
+		size_t		encoded_length = strlen(parse->encoded_pathname);
+		size_t		raw_length = encoded_length / 2;
 
 		parse->pathname = palloc(raw_length + 1);
 		if (encoded_length % 2 != 0 ||
@@ -916,11 +916,9 @@ hexdecode_char(char c)
  * Returns false if invalid characters are encountered; otherwise true.
  */
 static bool
-hexdecode_string(uint8 *result, char *input, int nbytes)
+hexdecode_string(uint8 *result, const char *input, size_t nbytes)
 {
-	int			i;
-
-	for (i = 0; i < nbytes; ++i)
+	for (size_t i = 0; i < nbytes; ++i)
 	{
 		int			n1 = hexdecode_char(input[i * 2]);
 		int			n2 = hexdecode_char(input[i * 2 + 1]);

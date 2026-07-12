@@ -87,7 +87,9 @@ pg_strong_random(void *buf, size_t len)
 		RAND_poll();
 	}
 
-	if (RAND_bytes(buf, len) == 1)
+	if (len > INT_MAX)
+		return false;
+	if (RAND_bytes(buf, (int) len) == 1)
 		return true;
 	return false;
 }

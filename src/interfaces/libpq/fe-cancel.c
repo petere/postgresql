@@ -549,7 +549,7 @@ PQcancel(PGcancel *cancel, char *errbuf, int errbufsize)
 {
 	int			save_errno = SOCK_ERRNO;
 	pgsocket	tmpsock = PGINVALID_SOCKET;
-	int			maxlen;
+	size_t		maxlen;
 	char		recvbuf;
 	int			cancel_pkt_len;
 
