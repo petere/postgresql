@@ -327,7 +327,7 @@ PageSetPageSizeAndVersion(Page page, Size size, uint8 version)
 	Assert((size & 0xFF00) == size);
 	Assert((version & 0x00FF) == version);
 
-	((PageHeader) page)->pd_pagesize_version = size | version;
+	((PageHeader) page)->pd_pagesize_version = (uint16) size | version;
 }
 
 /* ----------------
@@ -341,7 +341,8 @@ PageSetPageSizeAndVersion(Page page, Size size, uint8 version)
 static inline uint16
 PageGetSpecialSize(const PageData *page)
 {
-	return (PageGetPageSize(page) - ((const PageHeaderData *) page)->pd_special);
+	static_assert(BLCKSZ <= UINT16_MAX);
+	return (uint16) (PageGetPageSize(page) - ((const PageHeaderData *) page)->pd_special);
 }
 
 /*
