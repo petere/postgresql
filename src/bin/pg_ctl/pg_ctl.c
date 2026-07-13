@@ -320,7 +320,6 @@ readfile(const char *path, int *numlines)
 	size_t		buflen;
 	char	   *buffer;
 	char	   *linebegin;
-	int			i;
 	int			n;
 	ssize_t		nread;
 	struct stat statbuf;
@@ -370,7 +369,7 @@ readfile(const char *path, int *numlines)
 	 * any characters after the last newline will be ignored.
 	 */
 	nlines = 0;
-	for (i = 0; i < nread; i++)
+	for (ssize_t i = 0; i < nread; i++)
 	{
 		if (buffer[i] == '\n')
 			nlines++;
@@ -383,7 +382,7 @@ readfile(const char *path, int *numlines)
 	/* now split the buffer into lines */
 	linebegin = buffer;
 	n = 0;
-	for (i = 0; i < nread; i++)
+	for (ssize_t i = 0; i < nread; i++)
 	{
 		if (buffer[i] == '\n')
 		{
