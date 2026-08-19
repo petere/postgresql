@@ -1150,7 +1150,8 @@ jobs:
   # Test that code can be built with both gcc and clang without warnings,
   # with various combinations of cassert/dtrace flags. Trace probes have
   # a history of getting accidentally broken; the matrix is there to
-  # catch that.
+  # catch that.  Also runs some other source-level checks: headerscheck,
+  # cpluspluscheck, and an advisory (non-failing) pgindent check.
   #
   # The autoconf cache files (gcc.cache / clang.cache) are intentionally
   # reused across the matrix entries that share a compiler, so we don't
@@ -1270,6 +1271,43 @@ jobs:
           make -s -j${{env.BUILD_JOBS}} -k ${{env.CHECKFLAGS}} \
             headerscheck cpluspluscheck \
             EXTRAFLAGS='-fmax-errors=10'
+
+      ###
+      # Verify the tree is pgindent-clean
+      #
+      # Advisory only: reports violations as a warning annotation and in the
+      # step summary, but does not fail the workflow.  (The in-tree
+      # typedefs.list chronically lags behind newly added typedefs, so
+      # occasional differences are expected.)
+      #
+      # Relies on the preceding headerscheck step having configured the tree,
+      # which is needed to build pg_bsd_indent.
+      ###
+      - name: pgindent check
+        if: ${{ !cancelled() }}
+        run: |
+          echo "::group::build pg_bsd_indent"
+          make -s -C src/tools/pg_bsd_indent all
+          echo "::endgroup::"
+
+          rc=0
+          src/tools/pgindent/pgindent \
+            --indent=src/tools/pg_bsd_indent/pg_bsd_indent \
+            --check --diff . > pgindent.diff || rc=$?
+
+          if [ "$rc" -eq 2 ]; then
+            echo "::warning title=pgindent::Tree is not pgindent-clean, see the CompilerWarnings job summary for the diff"
+            {
+              echo "### pgindent found formatting differences"
+              echo '```diff'
+              head -c 900000 pgindent.diff  # step summaries are capped at 1 MiB
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$rc" -ne 0 ]; then
+            # pgindent itself failed; that is a real error
+            cat pgindent.diff
+            exit "$rc"
+          fi
 
       - *ccache_decide_save_step
       - *ccache_save_step
