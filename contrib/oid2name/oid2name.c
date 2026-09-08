@@ -18,19 +18,19 @@
 #include "pg_getopt.h"
 
 /* an extensible array to keep track of elements to show */
-typedef struct
+struct eary
 {
 	char	  **array;
 	int			num;
 	int			alloc;
-} eary;
+};
 
 /* these are the opts structures for command line params */
 struct options
 {
-	eary	   *tables;
-	eary	   *oids;
-	eary	   *filenumbers;
+	struct eary *tables;
+	struct eary *oids;
+	struct eary *filenumbers;
 
 	bool		quiet;
 	bool		systables;
@@ -49,8 +49,8 @@ struct options
 /* function prototypes */
 static void help(const char *progname);
 void		get_opts(int argc, char **argv, struct options *my_opts);
-void		add_one_elt(char *eltname, eary *eary);
-char	   *get_comma_elts(eary *eary);
+void		add_one_elt(char *eltname, struct eary *eary);
+char	   *get_comma_elts(struct eary *eary);
 PGconn	   *sql_conn(struct options *my_opts);
 int			sql_exec(PGconn *conn, const char *todo, bool quiet);
 void		sql_exec_dumpalldbs(PGconn *conn, struct options *opts);
@@ -232,22 +232,22 @@ help(const char *progname)
  * Add one element to a (possibly empty) eary struct.
  */
 void
-add_one_elt(char *eltname, eary *eary)
+add_one_elt(char *eltname, struct eary *eary)
 {
 	if (eary->alloc == 0)
 	{
-		eary	  ->alloc = 8;
-		eary	  ->array = pg_malloc_array(char *, 8);
+		eary->alloc = 8;
+		eary->array = pg_malloc_array(char *, 8);
 	}
 	else if (eary->num >= eary->alloc)
 	{
-		eary	  ->alloc *= 2;
-		eary	  ->array = pg_realloc_array(eary->array, char *,
-											 eary->alloc);
+		eary->alloc *= 2;
+		eary->array = pg_realloc_array(eary->array, char *,
+									   eary->alloc);
 	}
 
-	eary	  ->array[eary->num] = pg_strdup(eltname);
-	eary	  ->num++;
+	eary->array[eary->num] = pg_strdup(eltname);
+	eary->num++;
 }
 
 /*
@@ -258,7 +258,7 @@ add_one_elt(char *eltname, eary *eary)
  * SQL statement.
  */
 char *
-get_comma_elts(eary *eary)
+get_comma_elts(struct eary *eary)
 {
 	char	   *ret,
 			   *ptr;
@@ -587,9 +587,9 @@ main(int argc, char **argv)
 
 	my_opts = pg_malloc_object(struct options);
 
-	my_opts->oids = pg_malloc_object(eary);
-	my_opts->tables = pg_malloc_object(eary);
-	my_opts->filenumbers = pg_malloc_object(eary);
+	my_opts->oids = pg_malloc_object(struct eary);
+	my_opts->tables = pg_malloc_object(struct eary);
+	my_opts->filenumbers = pg_malloc_object(struct eary);
 
 	my_opts->oids->num = my_opts->oids->alloc = 0;
 	my_opts->tables->num = my_opts->tables->alloc = 0;

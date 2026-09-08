@@ -50,11 +50,11 @@
  * file data is correct.
  */
 ControlFileData *
-get_controlfile(const char *DataDir, bool *crc_ok_p)
+get_controlfile(const char *datadir, bool *crc_ok_p)
 {
 	char		ControlFilePath[MAXPGPATH];
 
-	snprintf(ControlFilePath, MAXPGPATH, "%s/%s", DataDir, XLOG_CONTROL_FILE);
+	snprintf(ControlFilePath, MAXPGPATH, "%s/%s", datadir, XLOG_CONTROL_FILE);
 
 	return get_controlfile_by_exact_path(ControlFilePath, crc_ok_p);
 }
@@ -187,7 +187,7 @@ retry:
  * routine in the backend.
  */
 void
-update_controlfile(const char *DataDir,
+update_controlfile(const char *datadir,
 				   ControlFileData *ControlFile, bool do_sync)
 {
 	int			fd;
@@ -212,7 +212,7 @@ update_controlfile(const char *DataDir,
 	memset(buffer, 0, PG_CONTROL_FILE_SIZE);
 	memcpy(buffer, ControlFile, sizeof(ControlFileData));
 
-	snprintf(ControlFilePath, sizeof(ControlFilePath), "%s/%s", DataDir, XLOG_CONTROL_FILE);
+	snprintf(ControlFilePath, sizeof(ControlFilePath), "%s/%s", datadir, XLOG_CONTROL_FILE);
 
 #ifndef FRONTEND
 

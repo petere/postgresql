@@ -367,10 +367,10 @@ statext_dependencies_build(StatsBuildData *data)
 		AttrNumber *dependency; /* array with k elements */
 
 		/* prepare a DependencyGenerator of variation */
-		DependencyGenerator DependencyGenerator = DependencyGenerator_init(data->nattnums, k);
+		DependencyGenerator depgen = DependencyGenerator_init(data->nattnums, k);
 
 		/* generate all possible variations of k values (out of n) */
-		while ((dependency = DependencyGenerator_next(DependencyGenerator)))
+		while ((dependency = DependencyGenerator_next(depgen)))
 		{
 			double		degree;
 			MVDependency *d;
@@ -422,7 +422,7 @@ statext_dependencies_build(StatsBuildData *data)
 		 * we're done with variations of k elements, so free the
 		 * DependencyGenerator
 		 */
-		DependencyGenerator_free(DependencyGenerator);
+		DependencyGenerator_free(depgen);
 	}
 
 	MemoryContextDelete(cxt);

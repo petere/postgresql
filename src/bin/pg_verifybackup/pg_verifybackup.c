@@ -414,7 +414,7 @@ parse_manifest_file(char *manifest_path)
 	char	   *buffer;
 	JsonManifestParseContext context;
 	manifest_data *result;
-	size_t		total_size;
+	size_t		file_size;
 	const size_t chunk_size = READ_CHUNK_SIZE;
 
 	/* Open the manifest file. */
@@ -441,35 +441,35 @@ parse_manifest_file(char *manifest_path)
 	context.per_wal_range_cb = verifybackup_per_wal_range_cb;
 	context.error_cb = report_manifest_error;
 
-	total_size = statbuf.st_size;
+	file_size = statbuf.st_size;
 
 	/*
 	 * Parse the file, in chunks if necessary.
 	 */
-	if (total_size <= chunk_size)
+	if (file_size <= chunk_size)
 	{
 		ssize_t		rc;
 
-		buffer = pg_malloc(total_size);
-		rc = read(fd, buffer, total_size);
-		if (rc != total_size)
+		buffer = pg_malloc(file_size);
+		rc = read(fd, buffer, file_size);
+		if (rc != file_size)
 		{
 			if (rc < 0)
 				pg_fatal("could not read file \"%s\": %m", manifest_path);
 			else
 				pg_fatal("could not read file \"%s\": read %zd of %zu",
-						 manifest_path, rc, total_size);
+						 manifest_path, rc, file_size);
 		}
 
 		/* Close the manifest file. */
 		close(fd);
 
 		/* Parse the manifest. */
-		json_parse_manifest(&context, buffer, total_size);
+		json_parse_manifest(&context, buffer, file_size);
 	}
 	else
 	{
-		size_t		bytes_left = total_size;
+		size_t		bytes_left = file_size;
 		JsonManifestParseIncrementalState *inc_state;
 
 		inc_state = json_parse_manifest_incremental_init(&context);
@@ -498,8 +498,8 @@ parse_manifest_file(char *manifest_path)
 				else
 					pg_fatal("could not read file \"%s\": read %zu of %zu",
 							 manifest_path,
-							 total_size + rc - bytes_left,
-							 total_size);
+							 file_size + rc - bytes_left,
+							 file_size);
 			}
 			bytes_left -= rc;
 			json_parse_manifest_incremental_chunk(inc_state, buffer, rc,

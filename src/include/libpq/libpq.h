@@ -171,7 +171,7 @@ typedef enum HostsFileLoadResult
 extern int	run_ssl_passphrase_command(const char *cmd, const char *prompt,
 									   bool is_server_start,
 									   char *buf, int size);
-extern bool check_ssl_key_file_permissions(const char *ssl_key_file,
+extern bool check_ssl_key_file_permissions(const char *filename,
 										   bool isServerStart);
 extern HostsFileLoadResult load_hosts(List **hosts, char **err_msg);
 

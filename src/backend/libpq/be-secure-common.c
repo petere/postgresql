@@ -118,17 +118,17 @@ error:
  * Check permissions for SSL key files.
  */
 bool
-check_ssl_key_file_permissions(const char *ssl_key_file, bool isServerStart)
+check_ssl_key_file_permissions(const char *filename, bool isServerStart)
 {
 	int			loglevel = isServerStart ? FATAL : LOG;
 	struct stat buf;
 
-	if (stat(ssl_key_file, &buf) != 0)
+	if (stat(filename, &buf) != 0)
 	{
 		ereport(loglevel,
 				(errcode_for_file_access(),
 				 errmsg("could not access private key file \"%s\": %m",
-						ssl_key_file)));
+						filename)));
 		return false;
 	}
 
@@ -138,7 +138,7 @@ check_ssl_key_file_permissions(const char *ssl_key_file, bool isServerStart)
 		ereport(loglevel,
 				(errcode(ERRCODE_CONFIG_FILE_ERROR),
 				 errmsg("private key file \"%s\" is not a regular file",
-						ssl_key_file)));
+						filename)));
 		return false;
 	}
 
@@ -164,7 +164,7 @@ check_ssl_key_file_permissions(const char *ssl_key_file, bool isServerStart)
 		ereport(loglevel,
 				(errcode(ERRCODE_CONFIG_FILE_ERROR),
 				 errmsg("private key file \"%s\" must be owned by the database user or root",
-						ssl_key_file)));
+						filename)));
 		return false;
 	}
 
@@ -174,7 +174,7 @@ check_ssl_key_file_permissions(const char *ssl_key_file, bool isServerStart)
 		ereport(loglevel,
 				(errcode(ERRCODE_CONFIG_FILE_ERROR),
 				 errmsg("private key file \"%s\" has group or world access",
-						ssl_key_file),
+						filename),
 				 errdetail("File must have permissions u=rw (0600) or less if owned by the database user, or permissions u=rw,g=r (0640) or less if owned by root.")));
 		return false;
 	}

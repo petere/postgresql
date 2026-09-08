@@ -3748,7 +3748,6 @@ dsm_segment_detach_callback
 duration
 eLogType
 ean13
-eary
 ec_matches_callback_type
 ec_member_foreign_arg
 ec_member_matches_arg
