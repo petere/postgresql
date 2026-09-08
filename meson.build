@@ -2212,7 +2212,7 @@ common_warning_flags = [
   '-Werror=unguarded-availability-new',
   '-Wmissing-format-attribute',
   '-Wcast-function-type',
-  '-Wshadow=compatible-local',
+  '-Wshadow=local',
   # This was included in -Wall/-Wformat in older GCC versions
   '-Wformat-security',
 ]
