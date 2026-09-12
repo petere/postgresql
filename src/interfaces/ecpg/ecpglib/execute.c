@@ -111,32 +111,32 @@ free_statement(struct statement *stmt)
 }
 
 static int
-next_insert(char *text, int pos, bool questionmarks, bool std_strings)
+next_insert(char *txt, int pos, bool questionmarks, bool std_strings)
 {
 	bool		string = false;
 	int			p = pos;
 
-	for (; text[p] != '\0'; p++)
+	for (; txt[p] != '\0'; p++)
 	{
-		if (string && !std_strings && text[p] == '\\')	/* escape character */
+		if (string && !std_strings && txt[p] == '\\')	/* escape character */
 			p++;
-		else if (text[p] == '\'')
+		else if (txt[p] == '\'')
 			string = string ? false : true;
 		else if (!string)
 		{
-			if (text[p] == '$' && isdigit((unsigned char) text[p + 1]))
+			if (txt[p] == '$' && isdigit((unsigned char) txt[p + 1]))
 			{
 				/* this can be either a dollar quote or a variable */
 				int			i;
 
-				for (i = p + 1; isdigit((unsigned char) text[i]); i++)
+				for (i = p + 1; isdigit((unsigned char) txt[i]); i++)
 					 /* empty loop body */ ;
-				if (!isalpha((unsigned char) text[i]) &&
-					isascii((unsigned char) text[i]) && text[i] != '_')
+				if (!isalpha((unsigned char) txt[i]) &&
+					isascii((unsigned char) txt[i]) && txt[i] != '_')
 					/* not dollar delimited quote */
 					return p;
 			}
-			else if (questionmarks && text[p] == '?')
+			else if (questionmarks && txt[p] == '?')
 			{
 				/* also allow old style placeholders */
 				return p;

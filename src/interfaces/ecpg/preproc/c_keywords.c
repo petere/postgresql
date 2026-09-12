@@ -33,7 +33,7 @@ static const uint16 ScanCKeywordTokens[] = {
  * ScanKeywordLookup(), except we want case-sensitive matching.
  */
 int
-ScanCKeywordLookup(const char *text)
+ScanCKeywordLookup(const char *txt)
 {
 	size_t		len;
 	int			h;
@@ -43,7 +43,7 @@ ScanCKeywordLookup(const char *text)
 	 * Reject immediately if too long to be any keyword.  This saves useless
 	 * hashing work on long strings.
 	 */
-	len = strlen(text);
+	len = strlen(txt);
 	if (len > ScanCKeywords.max_kw_len)
 		return -1;
 
@@ -51,7 +51,7 @@ ScanCKeywordLookup(const char *text)
 	 * Compute the hash function.  Since it's a perfect hash, we need only
 	 * match to the specific keyword it identifies.
 	 */
-	h = ScanCKeywords_hash_func(text, len);
+	h = ScanCKeywords_hash_func(txt, len);
 
 	/* An out-of-range result implies no match */
 	if (h < 0 || h >= ScanCKeywords.num_keywords)
@@ -59,7 +59,7 @@ ScanCKeywordLookup(const char *text)
 
 	kw = GetScanKeyword(h, &ScanCKeywords);
 
-	if (strcmp(kw, text) == 0)
+	if (strcmp(kw, txt) == 0)
 		return ScanCKeywordTokens[h];
 
 	return -1;

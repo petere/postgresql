@@ -27,11 +27,11 @@ static text *
 sv2text(SV *sv)
 {
 	char	   *str = sv2cstr(sv);
-	text	   *text;
+	text	   *txt;
 
-	text = cstring_to_text(str);
+	txt = cstring_to_text(str);
 	pfree(str);
-	return text;
+	return txt;
 }
 
 MODULE = PostgreSQL::InServer::Util PREFIX = util_

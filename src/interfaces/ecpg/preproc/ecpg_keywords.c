@@ -36,17 +36,17 @@ static const uint16 ECPGScanKeywordTokens[] = {
  * Keywords are matched using the same case-folding rules as in the backend.
  */
 int
-ScanECPGKeywordLookup(const char *text)
+ScanECPGKeywordLookup(const char *txt)
 {
 	int			kwnum;
 
 	/* First check SQL symbols defined by the backend. */
-	kwnum = ScanKeywordLookup(text, &ScanKeywords);
+	kwnum = ScanKeywordLookup(txt, &ScanKeywords);
 	if (kwnum >= 0)
 		return SQLScanKeywordTokens[kwnum];
 
 	/* Try ECPG-specific keywords. */
-	kwnum = ScanKeywordLookup(text, &ScanECPGKeywords);
+	kwnum = ScanKeywordLookup(txt, &ScanECPGKeywords);
 	if (kwnum >= 0)
 		return ECPGScanKeywordTokens[kwnum];
 

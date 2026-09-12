@@ -114,21 +114,21 @@ ecpg_register_prepared_stmt(struct statement *stmt)
 }
 
 static bool
-replace_variables(char **text, int lineno)
+replace_variables(char **txt, int lineno)
 {
 	bool		string = false;
 	int			counter = 1,
 				ptr = 0;
 
-	for (; (*text)[ptr] != '\0'; ptr++)
+	for (; (*txt)[ptr] != '\0'; ptr++)
 	{
-		if ((*text)[ptr] == '\'')
+		if ((*txt)[ptr] == '\'')
 			string = string ? false : true;
 
-		if (string || (((*text)[ptr] != ':') && ((*text)[ptr] != '?')))
+		if (string || (((*txt)[ptr] != ':') && ((*txt)[ptr] != '?')))
 			continue;
 
-		if (((*text)[ptr] == ':') && ((*text)[ptr + 1] == ':'))
+		if (((*txt)[ptr] == ':') && ((*txt)[ptr + 1] == ':'))
 			ptr += 2;			/* skip  '::' */
 		else
 		{
@@ -143,25 +143,25 @@ replace_variables(char **text, int lineno)
 
 			snprintf(buffer, buffersize, "$%d", counter++);
 
-			for (len = 1; (*text)[ptr + len] && isvarchar((*text)[ptr + len]); len++)
+			for (len = 1; (*txt)[ptr + len] && isvarchar((*txt)[ptr + len]); len++)
 				 /* skip */ ;
-			if (!(newcopy = ecpg_alloc(strlen(*text) - len + strlen(buffer) + 1, lineno)))
+			if (!(newcopy = ecpg_alloc(strlen(*txt) - len + strlen(buffer) + 1, lineno)))
 			{
 				ecpg_free(buffer);
 				return false;
 			}
 
-			memcpy(newcopy, *text, ptr);
+			memcpy(newcopy, *txt, ptr);
 			strcpy(newcopy + ptr, buffer);
-			strcat(newcopy, (*text) +ptr + len);
+			strcat(newcopy, (*txt) +ptr + len);
 
-			ecpg_free(*text);
+			ecpg_free(*txt);
 			ecpg_free(buffer);
 
-			*text = newcopy;
+			*txt = newcopy;
 
-			if ((*text)[ptr] == '\0')	/* we reached the end */
-				ptr--;			/* since we will (*text)[ptr]++ in the top
+			if ((*txt)[ptr] == '\0')	/* we reached the end */
+				ptr--;			/* since we will (*txt)[ptr]++ in the top
 								 * level for loop */
 		}
 	}
@@ -299,16 +299,16 @@ deallocate_one(int lineno, enum COMPAT_MODE c, struct connection *con,
 	/* first deallocate the statement in the backend */
 	if (this->prepared)
 	{
-		char	   *text;
+		char	   *txt;
 		PGresult   *query;
 
-		text = ecpg_alloc(strlen("deallocate \"\" ") + strlen(this->name), this->stmt->lineno);
+		txt = ecpg_alloc(strlen("deallocate \"\" ") + strlen(this->name), this->stmt->lineno);
 
-		if (text)
+		if (txt)
 		{
-			sprintf(text, "deallocate \"%s\"", this->name);
-			query = PQexec(this->stmt->connection->connection, text);
-			ecpg_free(text);
+			sprintf(txt, "deallocate \"%s\"", this->name);
+			query = PQexec(this->stmt->connection->connection, txt);
+			ecpg_free(txt);
 			if (ecpg_check_PQresult(query, lineno,
 									this->stmt->connection->connection,
 									this->stmt->compat))

@@ -122,8 +122,8 @@ extern void remove_variables(int brace_level);
 extern struct variable *new_variable(const char *name,
 									 struct ECPGtype *type,
 									 int brace_level);
-extern int	ScanCKeywordLookup(const char *text);
-extern int	ScanECPGKeywordLookup(const char *text);
+extern int	ScanCKeywordLookup(const char *txt);
+extern int	ScanECPGKeywordLookup(const char *txt);
 extern void parser_init(void);
 extern int	filtered_base_yylex(void);
 

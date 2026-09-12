@@ -250,7 +250,7 @@ static bool completion_force_quote; /* true to force-quote filenames */
  * The query is generally expected to return raw SQL identifiers; matching
  * to what the user typed is done in a quoting-aware fashion.  If what is
  * returned is not SQL identifiers, use one of the VERBATIM forms, in which
- * case the query results are matched to the user's text without double-quote
+ * case the query results are matched to the user's txt without double-quote
  * processing (so if quoting is needed, you must provide it in the query
  * results).
  */
@@ -262,7 +262,7 @@ do { \
 	completion_charp = query; \
 	completion_charpp = list; \
 	completion_verbatim = false; \
-	matches = rl_completion_matches(text, complete_from_query); \
+	matches = rl_completion_matches(txt, complete_from_query); \
 } while (0)
 
 #define COMPLETE_WITH_QUERY_PLUS(query, ...) \
@@ -279,7 +279,7 @@ do { \
 	completion_charp = query; \
 	completion_charpp = list; \
 	completion_verbatim = true; \
-	matches = rl_completion_matches(text, complete_from_query); \
+	matches = rl_completion_matches(txt, complete_from_query); \
 } while (0)
 
 #define COMPLETE_WITH_QUERY_VERBATIM_PLUS(query, ...) \
@@ -296,7 +296,7 @@ do { \
 	completion_vquery = query; \
 	completion_charpp = list; \
 	completion_verbatim = false; \
-	matches = rl_completion_matches(text, complete_from_versioned_query); \
+	matches = rl_completion_matches(txt, complete_from_versioned_query); \
 } while (0)
 
 #define COMPLETE_WITH_VERSIONED_QUERY_PLUS(query, ...) \
@@ -313,7 +313,7 @@ do { \
 	completion_squery = &(query); \
 	completion_charpp = list; \
 	completion_verbatim = false; \
-	matches = rl_completion_matches(text, complete_from_schema_query); \
+	matches = rl_completion_matches(txt, complete_from_schema_query); \
 } while (0)
 
 #define COMPLETE_WITH_SCHEMA_QUERY_PLUS(query, ...) \
@@ -327,7 +327,7 @@ do { \
 	completion_squery = &(query); \
 	completion_charpp = NULL; \
 	completion_verbatim = true; \
-	matches = rl_completion_matches(text, complete_from_schema_query); \
+	matches = rl_completion_matches(txt, complete_from_schema_query); \
 } while (0)
 
 #define COMPLETE_WITH_VERSIONED_SCHEMA_QUERY(query) \
@@ -338,7 +338,7 @@ do { \
 	completion_squery = query; \
 	completion_charpp = list; \
 	completion_verbatim = false; \
-	matches = rl_completion_matches(text, complete_from_versioned_schema_query); \
+	matches = rl_completion_matches(txt, complete_from_versioned_schema_query); \
 } while (0)
 
 #define COMPLETE_WITH_VERSIONED_SCHEMA_QUERY_PLUS(query, ...) \
@@ -355,14 +355,14 @@ do { \
 do { \
 	completion_case_sensitive = (cs); \
 	completion_charp = (con); \
-	matches = rl_completion_matches(text, complete_from_const); \
+	matches = rl_completion_matches(txt, complete_from_const); \
 } while (0)
 
 #define COMPLETE_WITH_LIST_INT(cs, list) \
 do { \
 	completion_case_sensitive = (cs); \
 	completion_charpp = (list); \
-	matches = rl_completion_matches(text, complete_from_list); \
+	matches = rl_completion_matches(txt, complete_from_list); \
 } while (0)
 
 #define COMPLETE_WITH_LIST(list) COMPLETE_WITH_LIST_INT(false, list)
@@ -389,7 +389,7 @@ do { \
 	completion_squery = &(Query_for_list_of_attributes); \
 	completion_charpp = list; \
 	completion_verbatim = false; \
-	matches = rl_completion_matches(text, complete_from_schema_query); \
+	matches = rl_completion_matches(txt, complete_from_schema_query); \
 } while (0)
 
 #define COMPLETE_WITH_ATTR_PLUS(relation, ...) \
@@ -400,21 +400,21 @@ do { \
 
 /*
  * libedit will typically include the literal's leading single quote in
- * "text", while readline will not.  Adapt our offered strings to fit.
- * But include a quote if there's not one just before "text", to get the
+ * "txt", while readline will not.  Adapt our offered strings to fit.
+ * But include a quote if there's not one just before "txt", to get the
  * user off to the right start.
  */
 #define COMPLETE_WITH_ENUM_VALUE(type) \
 do { \
 	set_completion_reference(type); \
-	if (text[0] == '\'' || \
+	if (txt[0] == '\'' || \
 		start == 0 || rl_line_buffer[start - 1] != '\'') \
 		completion_squery = &(Query_for_list_of_enum_values_quoted); \
 	else \
 		completion_squery = &(Query_for_list_of_enum_values_unquoted); \
 	completion_charpp = NULL; \
 	completion_verbatim = true; \
-	matches = rl_completion_matches(text, complete_from_schema_query); \
+	matches = rl_completion_matches(txt, complete_from_schema_query); \
 } while (0)
 
 /*
@@ -424,7 +424,7 @@ do { \
 #define COMPLETE_WITH_TIMEZONE_NAME() \
 do { \
 	static const char *const list[] = { "DEFAULT", NULL }; \
-	if (text[0] == '\'') \
+	if (txt[0] == '\'') \
 		completion_charp = Query_for_list_of_timezone_names_quoted_in; \
 	else if (start == 0 || rl_line_buffer[start - 1] != '\'') \
 		completion_charp = Query_for_list_of_timezone_names_quoted_out; \
@@ -432,7 +432,7 @@ do { \
 		completion_charp = Query_for_list_of_timezone_names_unquoted; \
 	completion_charpp = list;							  \
 	completion_verbatim = true; \
-	matches = rl_completion_matches(text, complete_from_query); \
+	matches = rl_completion_matches(txt, complete_from_query); \
 } while (0)
 
 #define COMPLETE_WITH_FUNCTION_ARG(function) \
@@ -441,7 +441,7 @@ do { \
 	completion_squery = &(Query_for_list_of_arguments); \
 	completion_charpp = NULL; \
 	completion_verbatim = true; \
-	matches = rl_completion_matches(text, complete_from_schema_query); \
+	matches = rl_completion_matches(txt, complete_from_schema_query); \
 } while (0)
 
 #define COMPLETE_WITH_FILES_LIST(escape, force_quote, list) \
@@ -449,7 +449,7 @@ do { \
 	completion_charp = escape; \
 	completion_charpp = list; \
 	completion_force_quote = force_quote; \
-	matches = rl_completion_matches(text, complete_from_files); \
+	matches = rl_completion_matches(txt, complete_from_files); \
 } while (0)
 
 #define COMPLETE_WITH_FILES(escape, force_quote) \
@@ -462,7 +462,7 @@ do { \
 } while (0)
 
 #define COMPLETE_WITH_GENERATOR(generator) \
-	matches = rl_completion_matches(text, generator)
+	matches = rl_completion_matches(txt, generator)
 
 /*
  * Assembly instructions for schema queries
@@ -1458,37 +1458,37 @@ static const char *const view_optional_parameters[] = {
 };
 
 /* Forward declaration of functions */
-static char **psql_completion(const char *text, int start, int end);
+static char **psql_completion(const char *txt, int start, int end);
 static char **match_previous_words(int pattern_id,
-								   const char *text, int start, int end,
+								   const char *txt, int start, int end,
 								   char **previous_words,
 								   int previous_words_count);
-static char *create_command_generator(const char *text, int state);
-static char *drop_command_generator(const char *text, int state);
-static char *alter_command_generator(const char *text, int state);
-static char *complete_from_query(const char *text, int state);
-static char *complete_from_versioned_query(const char *text, int state);
-static char *complete_from_schema_query(const char *text, int state);
-static char *complete_from_versioned_schema_query(const char *text, int state);
+static char *create_command_generator(const char *txt, int state);
+static char *drop_command_generator(const char *txt, int state);
+static char *alter_command_generator(const char *txt, int state);
+static char *complete_from_query(const char *txt, int state);
+static char *complete_from_versioned_query(const char *txt, int state);
+static char *complete_from_schema_query(const char *txt, int state);
+static char *complete_from_versioned_schema_query(const char *txt, int state);
 static char *_complete_from_query(const char *simple_query,
 								  const SchemaQuery *schema_query,
 								  const char *const *keywords,
 								  bool verbatim,
-								  const char *text, int state);
+								  const char *txt, int state);
 static void set_completion_reference(const char *word);
 static void set_completion_reference_verbatim(const char *word);
-static char *complete_from_list(const char *text, int state);
-static char *complete_from_const(const char *text, int state);
+static char *complete_from_list(const char *txt, int state);
+static char *complete_from_const(const char *txt, int state);
 static void append_variable_names(char ***varnames, int *nvars,
 								  int *maxvars, const char *varname,
 								  const char *prefix, const char *suffix);
-static char **complete_from_variables(const char *text,
+static char **complete_from_variables(const char *txt,
 									  const char *prefix, const char *suffix, bool need_value);
-static char *complete_from_files(const char *text, int state);
-static char *_complete_from_files(const char *text, int state);
+static char *complete_from_files(const char *txt, int state);
+static char *_complete_from_files(const char *txt, int state);
 
 static char *pg_strdup_keyword_case(const char *s, const char *ref);
-static char *escape_string(const char *text);
+static char *escape_string(const char *txt);
 static char *make_like_pattern(const char *word);
 static void parse_identifier(const char *ident,
 							 char **schemaname, char **objectname,
@@ -1846,7 +1846,7 @@ ends_with(const char *s, char c)
  * rl_completion_matches() function, so we don't have to worry about it.
  */
 static char **
-psql_completion(const char *text, int start, int end)
+psql_completion(const char *txt, int start, int end)
 {
 	/* This is the variable we'll return. */
 	char	  **matches = NULL;
@@ -1944,14 +1944,14 @@ psql_completion(const char *text, int start, int end)
 
 	/*
 	 * Temporary workaround for a bug in recent (2019) libedit: it incorrectly
-	 * de-escapes the input "text", causing us to fail to recognize backslash
+	 * de-escapes the input "txt", causing us to fail to recognize backslash
 	 * commands.  So get the string to look at from rl_line_buffer instead.
 	 */
 	char	   *text_copy = pnstrdup(rl_line_buffer + start, end - start);
-	text = text_copy;
+	txt = text_copy;
 
 	/* Remember last char of the given input word. */
-	completion_last_char = (end > start) ? text[end - start - 1] : '\0';
+	completion_last_char = (end > start) ? txt[end - start - 1] : '\0';
 
 	/* We usually want the append character to be a space. */
 	rl_completion_append_character = ' ';
@@ -1974,20 +1974,20 @@ psql_completion(const char *text, int start, int end)
 										&previous_words_count);
 
 	/* If current word is a backslash command, offer completions for that */
-	if (text[0] == '\\')
+	if (txt[0] == '\\')
 		COMPLETE_WITH_LIST_CS(backslash_commands);
 
 	/* If current word is a variable interpolation, handle that case */
-	else if (text[0] == ':' && text[1] != ':')
+	else if (txt[0] == ':' && txt[1] != ':')
 	{
-		if (text[1] == '\'')
-			matches = complete_from_variables(text, ":'", "'", true);
-		else if (text[1] == '"')
-			matches = complete_from_variables(text, ":\"", "\"", true);
-		else if (text[1] == '{' && text[2] == '?')
-			matches = complete_from_variables(text, ":{?", "}", true);
+		if (txt[1] == '\'')
+			matches = complete_from_variables(txt, ":'", "'", true);
+		else if (txt[1] == '"')
+			matches = complete_from_variables(txt, ":\"", "\"", true);
+		else if (txt[1] == '{' && txt[2] == '?')
+			matches = complete_from_variables(txt, ":{?", "}", true);
 		else
-			matches = complete_from_variables(text, ":", "", true);
+			matches = complete_from_variables(txt, ":", "", true);
 	}
 
 	/* If no previous word, suggest one of the basic sql commands */
@@ -2056,7 +2056,7 @@ psql_completion(const char *text, int start, int end)
 			}
 			if (match)
 			{
-				matches = match_previous_words(tcpat->id, text, start, end,
+				matches = match_previous_words(tcpat->id, txt, start, end,
 											   previous_words,
 											   previous_words_count);
 				if (matches != NULL)
@@ -2068,7 +2068,7 @@ psql_completion(const char *text, int start, int end)
 		 * If gen_tabcomplete.pl hasn't been applied to this code, just let
 		 * match_previous_words scan through all its patterns.
 		 */
-		matches = match_previous_words(0, text, start, end,
+		matches = match_previous_words(0, txt, start, end,
 									   previous_words,
 									   previous_words_count);
 #endif							/* SWITCH_CONVERSION_APPLIED */
@@ -2169,7 +2169,7 @@ psql_completion(const char *text, int start, int end)
  */
 static char **
 match_previous_words(int pattern_id,
-					 const char *text, int start, int end,
+					 const char *txt, int start, int end,
 					 char **previous_words, int previous_words_count)
 {
 	/* This is the variable we'll return. */
@@ -5525,7 +5525,7 @@ match_previous_words(int pattern_id,
 		COMPLETE_WITH_CS("commands", "options", "variables");
 	else if (TailMatchesCS("\\connect|\\c"))
 	{
-		if (!recognized_connection_string(text))
+		if (!recognized_connection_string(txt))
 			COMPLETE_WITH_QUERY(Query_for_list_of_databases);
 	}
 	else if (TailMatchesCS("\\connect|\\c", MatchAny))
@@ -5701,9 +5701,9 @@ match_previous_words(int pattern_id,
 			COMPLETE_WITH_CS("single", "double");
 	}
 	else if (TailMatchesCS("\\unset"))
-		matches = complete_from_variables(text, "", "", true);
+		matches = complete_from_variables(txt, "", "", true);
 	else if (TailMatchesCS("\\set"))
-		matches = complete_from_variables(text, "", "", false);
+		matches = complete_from_variables(txt, "", "", false);
 	else if (TailMatchesCS("\\set", MatchAny))
 	{
 		if (TailMatchesCS("AUTOCOMMIT|ON_ERROR_STOP|QUIET|SHOW_ALL_RESULTS|"
@@ -5762,7 +5762,7 @@ match_previous_words(int pattern_id,
  * Entries that have 'excluded' flags are not returned.
  */
 static char *
-create_or_drop_command_generator(const char *text, int state, uint32 excluded)
+create_or_drop_command_generator(const char *txt, int state, uint32 excluded)
 {
 	static int	list_index,
 				string_length;
@@ -5772,15 +5772,15 @@ create_or_drop_command_generator(const char *text, int state, uint32 excluded)
 	if (state == 0)
 	{
 		list_index = 0;
-		string_length = strlen(text);
+		string_length = strlen(txt);
 	}
 
 	/* find something that matches */
 	while ((name = words_after_create[list_index++].name))
 	{
-		if ((pg_strncasecmp(name, text, string_length) == 0) &&
+		if ((pg_strncasecmp(name, txt, string_length) == 0) &&
 			!(words_after_create[list_index - 1].flags & excluded))
-			return pg_strdup_keyword_case(name, text);
+			return pg_strdup_keyword_case(name, txt);
 	}
 	/* if nothing matches, return NULL */
 	return NULL;
@@ -5791,27 +5791,27 @@ create_or_drop_command_generator(const char *text, int state, uint32 excluded)
  * as defined above.
  */
 static char *
-create_command_generator(const char *text, int state)
+create_command_generator(const char *txt, int state)
 {
-	return create_or_drop_command_generator(text, state, THING_NO_CREATE);
+	return create_or_drop_command_generator(txt, state, THING_NO_CREATE);
 }
 
 /*
  * This function gives you a list of things you can put after a DROP command.
  */
 static char *
-drop_command_generator(const char *text, int state)
+drop_command_generator(const char *txt, int state)
 {
-	return create_or_drop_command_generator(text, state, THING_NO_DROP);
+	return create_or_drop_command_generator(txt, state, THING_NO_DROP);
 }
 
 /*
  * This function gives you a list of things you can put after an ALTER command.
  */
 static char *
-alter_command_generator(const char *text, int state)
+alter_command_generator(const char *txt, int state)
 {
-	return create_or_drop_command_generator(text, state, THING_NO_ALTER);
+	return create_or_drop_command_generator(txt, state, THING_NO_ALTER);
 }
 
 /*
@@ -5820,15 +5820,15 @@ alter_command_generator(const char *text, int state)
  */
 
 static char *
-complete_from_query(const char *text, int state)
+complete_from_query(const char *txt, int state)
 {
 	/* query is assumed to work for any server version */
 	return _complete_from_query(completion_charp, NULL, completion_charpp,
-								completion_verbatim, text, state);
+								completion_verbatim, txt, state);
 }
 
 static char *
-complete_from_versioned_query(const char *text, int state)
+complete_from_versioned_query(const char *txt, int state)
 {
 	const VersionedQuery *vquery = completion_vquery;
 
@@ -5840,19 +5840,19 @@ complete_from_versioned_query(const char *text, int state)
 		return NULL;
 
 	return _complete_from_query(vquery->query, NULL, completion_charpp,
-								completion_verbatim, text, state);
+								completion_verbatim, txt, state);
 }
 
 static char *
-complete_from_schema_query(const char *text, int state)
+complete_from_schema_query(const char *txt, int state)
 {
 	/* query is assumed to work for any server version */
 	return _complete_from_query(NULL, completion_squery, completion_charpp,
-								completion_verbatim, text, state);
+								completion_verbatim, txt, state);
 }
 
 static char *
-complete_from_versioned_schema_query(const char *text, int state)
+complete_from_versioned_schema_query(const char *txt, int state)
 {
 	const SchemaQuery *squery = completion_squery;
 
@@ -5864,7 +5864,7 @@ complete_from_versioned_schema_query(const char *text, int state)
 		return NULL;
 
 	return _complete_from_query(NULL, squery, completion_charpp,
-								completion_verbatim, text, state);
+								completion_verbatim, txt, state);
 }
 
 
@@ -5914,7 +5914,7 @@ _complete_from_query(const char *simple_query,
 					 const SchemaQuery *schema_query,
 					 const char *const *keywords,
 					 bool verbatim,
-					 const char *text, int state)
+					 const char *txt, int state)
 {
 	static int	list_index,
 				num_schema_only,
@@ -5950,12 +5950,12 @@ _complete_from_query(const char *simple_query,
 		/* Parse text, splitting into schema and object name if needed */
 		if (verbatim)
 		{
-			objectname = pg_strdup(text);
+			objectname = pg_strdup(txt);
 			schemaname = NULL;
 		}
 		else
 		{
-			parse_identifier(text,
+			parse_identifier(txt,
 							 &schemaname, &objectname,
 							 &schemaquoted, &objectquoted);
 		}
@@ -6209,10 +6209,10 @@ _complete_from_query(const char *simple_query,
 				if (nskip-- > 0)
 					continue;
 				list_index++;
-				if (pg_strncasecmp(text, item, strlen(text)) == 0)
+				if (pg_strncasecmp(txt, item, strlen(txt)) == 0)
 				{
 					num_keywords++;
-					return pg_strdup_keyword_case(item, text);
+					return pg_strdup_keyword_case(item, txt);
 				}
 			}
 		}
@@ -6227,10 +6227,10 @@ _complete_from_query(const char *simple_query,
 				if (nskip-- > 0)
 					continue;
 				list_index++;
-				if (pg_strncasecmp(text, item, strlen(text)) == 0)
+				if (pg_strncasecmp(txt, item, strlen(txt)) == 0)
 				{
 					num_keywords++;
-					return pg_strdup_keyword_case(item, text);
+					return pg_strdup_keyword_case(item, txt);
 				}
 			}
 		}
@@ -6285,7 +6285,7 @@ set_completion_reference_verbatim(const char *word)
  * SQL words that can appear at certain spot.
  */
 static char *
-complete_from_list(const char *text, int state)
+complete_from_list(const char *txt, int state)
 {
 	static int	string_length,
 				list_index,
@@ -6300,7 +6300,7 @@ complete_from_list(const char *text, int state)
 	if (state == 0)
 	{
 		list_index = 0;
-		string_length = strlen(text);
+		string_length = strlen(txt);
 		casesensitive = completion_case_sensitive;
 		matches = 0;
 	}
@@ -6308,14 +6308,14 @@ complete_from_list(const char *text, int state)
 	while ((item = completion_charpp[list_index++]))
 	{
 		/* First pass is case sensitive */
-		if (casesensitive && strncmp(text, item, string_length) == 0)
+		if (casesensitive && strncmp(txt, item, string_length) == 0)
 		{
 			matches++;
 			return pg_strdup(item);
 		}
 
 		/* Second pass is case insensitive, don't bother counting matches */
-		if (!casesensitive && pg_strncasecmp(text, item, string_length) == 0)
+		if (!casesensitive && pg_strncasecmp(txt, item, string_length) == 0)
 		{
 			if (completion_case_sensitive)
 				return pg_strdup(item);
@@ -6325,7 +6325,7 @@ complete_from_list(const char *text, int state)
 				 * If case insensitive matching was requested initially,
 				 * adjust the case according to setting.
 				 */
-				return pg_strdup_keyword_case(item, text);
+				return pg_strdup_keyword_case(item, txt);
 		}
 	}
 
@@ -6338,7 +6338,7 @@ complete_from_list(const char *text, int state)
 		casesensitive = false;
 		list_index = 0;
 		state++;
-		return complete_from_list(text, state);
+		return complete_from_list(txt, state);
 	}
 
 	/* If no more matches, return null. */
@@ -6365,7 +6365,7 @@ complete_from_list(const char *text, int state)
  * that won't try to auto-correct "misspellings".
  */
 static char *
-complete_from_const(const char *text, int state)
+complete_from_const(const char *txt, int state)
 {
 	Assert(completion_charp != NULL);
 	if (state == 0)
@@ -6378,7 +6378,7 @@ complete_from_const(const char *text, int state)
 			 * If case insensitive matching was requested initially, adjust
 			 * the case according to setting.
 			 */
-			return pg_strdup_keyword_case(completion_charp, text);
+			return pg_strdup_keyword_case(completion_charp, txt);
 	}
 	else
 		return NULL;
@@ -6412,7 +6412,7 @@ append_variable_names(char ***varnames, int *nvars,
  * (those that have hooks) are included even if currently unset.
  */
 static char **
-complete_from_variables(const char *text, const char *prefix, const char *suffix,
+complete_from_variables(const char *txt, const char *prefix, const char *suffix,
 						bool need_value)
 {
 	char	  **matches;
@@ -6452,7 +6452,7 @@ complete_from_variables(const char *text, const char *prefix, const char *suffix
  * they case-insensitively match the current input.
  */
 static char *
-complete_from_files(const char *text, int state)
+complete_from_files(const char *txt, int state)
 {
 	static int	list_index;
 	static bool files_done;
@@ -6467,7 +6467,7 @@ complete_from_files(const char *text, int state)
 
 	if (!files_done)
 	{
-		char	   *result = _complete_from_files(text, state);
+		char	   *result = _complete_from_files(txt, state);
 
 		/* Return a filename that matches */
 		if (result)
@@ -6486,10 +6486,10 @@ complete_from_files(const char *text, int state)
 	 */
 	while ((item = completion_charpp[list_index++]))
 	{
-		if (pg_strncasecmp(text, item, strlen(text)) == 0)
+		if (pg_strncasecmp(txt, item, strlen(txt)) == 0)
 		{
 			completion_force_quote = false;
-			return pg_strdup_keyword_case(item, text);
+			return pg_strdup_keyword_case(item, txt);
 		}
 	}
 
@@ -6510,7 +6510,7 @@ complete_from_files(const char *text, int state)
  * quotes around the result.  (The SQL COPY command requires that.)
  */
 static char *
-_complete_from_files(const char *text, int state)
+_complete_from_files(const char *txt, int state)
 {
 #ifdef USE_FILENAME_QUOTING_FUNCTIONS
 
@@ -6534,10 +6534,10 @@ _complete_from_files(const char *text, int state)
 #endif
 
 	/* If user typed a quote, force quoting (never remove user's quote) */
-	if (*text == '\'')
+	if (*txt == '\'')
 		completion_force_quote = true;
 
-	return rl_filename_completion_function(text, state);
+	return rl_filename_completion_function(txt, state);
 #else
 
 	/*
@@ -6548,19 +6548,19 @@ _complete_from_files(const char *text, int state)
 	char	   *ret = NULL;
 
 	/* If user typed a quote, force quoting (never remove user's quote) */
-	if (*text == '\'')
+	if (*txt == '\'')
 		completion_force_quote = true;
 
 	if (state == 0)
 	{
 		/* Initialization: stash the unquoted input. */
-		unquoted_text = strtokx(text, "", NULL, "'", *completion_charp,
+		unquoted_text = strtokx(txt, "", NULL, "'", *completion_charp,
 								false, true, pset.encoding);
 		/* expect a NULL return for the empty string only */
 		if (!unquoted_text)
 		{
-			Assert(*text == '\0');
-			unquoted_text = text;
+			Assert(*txt == '\0');
+			unquoted_text = txt;
 		}
 	}
 
@@ -6642,15 +6642,15 @@ pg_strdup_keyword_case(const char *s, const char *ref)
  * The returned value has to be freed.
  */
 static char *
-escape_string(const char *text)
+escape_string(const char *txt)
 {
 	size_t		text_length;
 	char	   *result;
 
-	text_length = strlen(text);
+	text_length = strlen(txt);
 
 	result = pg_malloc(text_length * 2 + 1);
-	PQescapeStringConn(pset.db, result, text, text_length, NULL);
+	PQescapeStringConn(pset.db, result, txt, text_length, NULL);
 
 	return result;
 }
