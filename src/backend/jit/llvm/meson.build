@@ -33,7 +33,14 @@ llvmjit = shared_module('llvmjit',
   llvmjit_sources,
   kwargs: pg_mod_args + {
     'dependencies': pg_mod_args['dependencies'] + [llvm],
-    'cpp_args': pg_mod_args['cpp_args'] + llvm.get_variable(configtool: 'cxxflags').split(),
+    # LLVM's headers produce warnings under some of the warning options
+    # we use for our own code (at least -Wshadow=local is known to be
+    # problematic), so turn those off for this module.  The warning
+    # options are added as project arguments, which meson cannot remove
+    # for a single target, so countermand them here; note that plain
+    # -Wno-shadow would not cover -Wshadow=local in gcc.
+    'cpp_args': pg_mod_args['cpp_args'] + llvm.get_variable(configtool: 'cxxflags').split()
+      + cxx.get_supported_arguments(['-Wno-shadow=local']),
   }
 )
 

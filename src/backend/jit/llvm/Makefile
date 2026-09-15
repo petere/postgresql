@@ -28,6 +28,13 @@ CXXFLAGS += $(LLVM_CXXFLAGS)
 override CPPFLAGS += $(LLVM_CPPFLAGS)
 SHLIB_LINK += $(LLVM_LIBS)
 
+# LLVM's headers produce warnings under some of the warning options we
+# use for our own code (at least -Wshadow=local is known to be
+# problematic), so remove those for this directory.  Note that they have
+# to be filtered out rather than countermanded with -Wno-shadow, because
+# in gcc that option does not cover -Wshadow=local.
+override CXXFLAGS := $(filter-out -Wshadow%,$(CXXFLAGS))
+
 # Because this module includes C++ files, we need to use a C++
 # compiler for linking. Makefile.shlib uses $(COMPILER) to build
 # loadable modules.
