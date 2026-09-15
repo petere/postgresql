@@ -46,10 +46,43 @@ AC_DEFUN([PGAC_LLVM_SUPPORT],
   # clear what the minimum version is.
 
   # Collect compiler flags necessary to build the LLVM dependent
-  # shared library.
+  # shared library.  The include directories are added with -isystem
+  # rather than -I, so that warnings from LLVM's own headers are not
+  # reported under the warning options we select for our own code.
+  # That must not be done for directories that are already default
+  # system include directories of the compiler, however, because it
+  # would change the order in which the system directories are searched
+  # and thus break the compilation of C++ code.  So determine the
+  # compiler's default include directories first.  (Meson does
+  # effectively the same thing for dependencies declared with
+  # include_type 'system'.)  If we cannot determine them, we don't use
+  # -isystem at all.
+  pgac_cxx_sysincludes=`LC_ALL=C $CXX $CXXFLAGS -xc++ -E -v /dev/null 2>&1 |
+    $AWK '/^#include <\.\.\.> search starts here:/ { flag = 1; next }
+          /^End of search list/ { flag = 0 }
+          flag { print [$]1 }'`
+
   for pgac_option in `$LLVM_CONFIG --cppflags`; do
     case $pgac_option in
-      -I*|-D*) LLVM_CPPFLAGS="$pgac_option $LLVM_CPPFLAGS";;
+      -I*)
+        pgac_incdir=${pgac_option#-I}
+        if test -n "$pgac_cxx_sysincludes"; then
+          pgac_isystem=yes
+        else
+          pgac_isystem=no
+        fi
+        for pgac_dir in $pgac_cxx_sysincludes; do
+          if test "x$pgac_dir" = "x$pgac_incdir"; then
+            pgac_isystem=no
+            break
+          fi
+        done
+        if test "$pgac_isystem" = yes; then
+          LLVM_CPPFLAGS="-isystem $pgac_incdir $LLVM_CPPFLAGS"
+        else
+          LLVM_CPPFLAGS="$pgac_option $LLVM_CPPFLAGS"
+        fi;;
+      -D*) LLVM_CPPFLAGS="$pgac_option $LLVM_CPPFLAGS";;
     esac
   done
 
