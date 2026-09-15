@@ -19,7 +19,27 @@ extern "C"
 #include "postgres.h"
 }
 
+/*
+ * LLVM's headers produce warnings under some of the warning options we
+ * use for our own code (at least -Wshadow=local is known to be
+ * problematic), so turn those off while including them.  Note that gcc
+ * attributes each warning to the most specific option that covers it,
+ * so all the -Wshadow variants have to be listed separately; and the
+ * "-Wshadow=..." spellings are unknown to clang, which would complain
+ * about an unknown warning group, hence the __clang__ check.
+ */
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshadow"
+#ifndef __clang__
+#pragma GCC diagnostic ignored "-Wshadow=local"
+#pragma GCC diagnostic ignored "-Wshadow=compatible-local"
+#endif
+#endif
 #include <llvm/Support/ErrorHandling.h>
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
 
 #include "jit/llvmjit.h"
 
