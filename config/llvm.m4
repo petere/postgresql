@@ -46,12 +46,38 @@ AC_DEFUN([PGAC_LLVM_SUPPORT],
   # clear what the minimum version is.
 
   # Collect compiler flags necessary to build the LLVM dependent
-  # shared library.
+  # shared library.  We'd like to add the include directories with
+  # -isystem rather than -I, so that warnings from LLVM's own headers
+  # are not reported under the warning options we select for our own
+  # code.  But that doesn't work if llvm-config reports a directory
+  # that is already a default system include directory of the compiler,
+  # such as /usr/include, because then -isystem changes the order in
+  # which the system directories are searched and thus breaks the
+  # compilation of C++ code.  So we assemble both variants here and
+  # check below whether the -isystem one actually works.
   for pgac_option in `$LLVM_CONFIG --cppflags`; do
     case $pgac_option in
-      -I*|-D*) LLVM_CPPFLAGS="$pgac_option $LLVM_CPPFLAGS";;
+      -I*) LLVM_CPPFLAGS="$pgac_option $LLVM_CPPFLAGS"
+           pgac_llvm_cppflags_isystem="-isystem ${pgac_option#-I} $pgac_llvm_cppflags_isystem";;
+      -D*) LLVM_CPPFLAGS="$pgac_option $LLVM_CPPFLAGS"
+           pgac_llvm_cppflags_isystem="$pgac_option $pgac_llvm_cppflags_isystem";;
     esac
   done
+
+  AC_CACHE_CHECK([whether -isystem works for the LLVM include directories],
+    [pgac_cv_llvm_isystem],
+    [AC_LANG_PUSH([C++])
+     pgac_save_CPPFLAGS=$CPPFLAGS
+     CPPFLAGS="$CPPFLAGS $pgac_llvm_cppflags_isystem"
+     AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <cstdlib>
+#include <string>]], [])],
+                       [pgac_cv_llvm_isystem=yes],
+                       [pgac_cv_llvm_isystem=no])
+     CPPFLAGS=$pgac_save_CPPFLAGS
+     AC_LANG_POP([C++])])
+  if test "$pgac_cv_llvm_isystem" = yes; then
+    LLVM_CPPFLAGS=$pgac_llvm_cppflags_isystem
+  fi
 
   for pgac_option in `$LLVM_CONFIG --ldflags`; do
     case $pgac_option in

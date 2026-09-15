@@ -5105,12 +5105,68 @@ fi
   # clear what the minimum version is.
 
   # Collect compiler flags necessary to build the LLVM dependent
-  # shared library.
+  # shared library.  We'd like to add the include directories with
+  # -isystem rather than -I, so that warnings from LLVM's own headers
+  # are not reported under the warning options we select for our own
+  # code.  But that doesn't work if llvm-config reports a directory
+  # that is already a default system include directory of the compiler,
+  # such as /usr/include, because then -isystem changes the order in
+  # which the system directories are searched and thus breaks the
+  # compilation of C++ code.  So we assemble both variants here and
+  # check below whether the -isystem one actually works.
   for pgac_option in `$LLVM_CONFIG --cppflags`; do
     case $pgac_option in
-      -I*|-D*) LLVM_CPPFLAGS="$pgac_option $LLVM_CPPFLAGS";;
+      -I*) LLVM_CPPFLAGS="$pgac_option $LLVM_CPPFLAGS"
+           pgac_llvm_cppflags_isystem="-isystem ${pgac_option#-I} $pgac_llvm_cppflags_isystem";;
+      -D*) LLVM_CPPFLAGS="$pgac_option $LLVM_CPPFLAGS"
+           pgac_llvm_cppflags_isystem="$pgac_option $pgac_llvm_cppflags_isystem";;
     esac
   done
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether -isystem works for the LLVM include directories" >&5
+$as_echo_n "checking whether -isystem works for the LLVM include directories... " >&6; }
+if ${pgac_cv_llvm_isystem+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_ext=cpp
+ac_cpp='$CXXCPP $CPPFLAGS'
+ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
+
+     pgac_save_CPPFLAGS=$CPPFLAGS
+     CPPFLAGS="$CPPFLAGS $pgac_llvm_cppflags_isystem"
+     cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <cstdlib>
+#include <string>
+int
+main ()
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_cxx_try_compile "$LINENO"; then :
+  pgac_cv_llvm_isystem=yes
+else
+  pgac_cv_llvm_isystem=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+     CPPFLAGS=$pgac_save_CPPFLAGS
+     ac_ext=c
+ac_cpp='$CPP $CPPFLAGS'
+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_c_compiler_gnu
+
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $pgac_cv_llvm_isystem" >&5
+$as_echo "$pgac_cv_llvm_isystem" >&6; }
+  if test "$pgac_cv_llvm_isystem" = yes; then
+    LLVM_CPPFLAGS=$pgac_llvm_cppflags_isystem
+  fi
 
   for pgac_option in `$LLVM_CONFIG --ldflags`; do
     case $pgac_option in
