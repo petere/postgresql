@@ -5,6 +5,9 @@
  *	src/bin/pg_upgrade/pg_upgrade.h
  */
 
+#ifndef PG_UPGRADE_H
+#define PG_UPGRADE_H
+
 #include <unistd.h>
 #include <assert.h>
 #include <sys/stat.h>
@@ -510,3 +513,5 @@ typedef struct
 	FILE	   *file;
 	char		path[MAXPGPATH];
 } UpgradeTaskReport;
+
+#endif							/* PG_UPGRADE_H */

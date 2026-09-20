@@ -9,6 +9,9 @@
  *-------------------------------------------------------------------------
  */
 
+#ifndef WALMETHODS_H
+#define WALMETHODS_H
+
 #include "common/compression.h"
 
 struct WalWriteMethod;
@@ -132,3 +135,5 @@ WalWriteMethod *CreateWalTarMethod(const char *tarbase,
 								   int compression_level, bool sync);
 
 const char *GetLastWalMethodError(WalWriteMethod *wwmethod);
+
+#endif							/* WALMETHODS_H */

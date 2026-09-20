@@ -8,6 +8,9 @@
  *-------------------------------------------------------------------------
  */
 
+#ifndef PG_REGRESS_H
+#define PG_REGRESS_H
+
 #include <unistd.h>
 
 #ifndef WIN32
@@ -65,3 +68,5 @@ int			regression_main(int argc, char *argv[],
 void		add_stringlist_item(_stringlist **listhead, const char *str);
 PID_TYPE	spawn_process(const char *cmdline);
 bool		file_exists(const char *file);
+
+#endif							/* PG_REGRESS_H */
