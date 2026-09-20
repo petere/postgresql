@@ -845,7 +845,9 @@ jobs:
       needs.setup.outputs.windows == 'true' &&
       needs.sanity-check.result != 'failure'
     runs-on: windows-2022
-    timeout-minutes: 60
+    # Enabling MSVC's static analyzer (see MSVC_ANALYZE_ARGS below) makes
+    # compilation considerably slower, hence the fairly high timeout.
+    timeout-minutes: 90
 
     # As described at the top of the task, split the tests across two runners
     # for performance. The gains from additional concurrency diminish
@@ -871,6 +873,30 @@ jobs:
         -Dplpython=enabled
         -Dssl=openssl
         -Dtap_tests=enabled
+
+      # Run MSVC's static analyzer as part of the build. Its diagnostics are
+      # emitted like ordinary compiler warnings, i.e. on stdout, and ninja
+      # passes compiler output through verbatim, so they end up in the console
+      # log of the Build step below. Do not wrap that step in a ::group::, as
+      # that would hide the analyzer output in a collapsed section.
+      #
+      # /analyze:external-
+      #   Don't analyze external (system) headers. /external:W0, which
+      #   meson.build passes, has no effect on the analyzer, so without this
+      #   the output would be dominated by warnings from the Windows SDK,
+      #   openssl, perl and python headers.
+      # /analyze:autolog-
+      #   Don't additionally write a $source.nativecodeanalysis.xml log file
+      #   for every translation unit; the console output is what we want.
+      # /analyze:WX-
+      #   Never turn analyzer warnings into errors, even if this job were to
+      #   be built with -Dwerror at some point. There are too many of them,
+      #   and too many false positives, for that to be useful today.
+      MSVC_ANALYZE_ARGS: >-
+        /analyze
+        /analyze:external-
+        /analyze:autolog-
+        /analyze:WX-
 
     defaults:
       run:
@@ -1004,6 +1030,7 @@ jobs:
             ${{env.MESON_FEATURES}} ^
             --buildtype debug ^
             -Db_pch=true ^
+            -Dc_args="${{env.MSVC_ANALYZE_ARGS}}" ^
             -DTAR=${{env.TAR}} ^
             build
 
