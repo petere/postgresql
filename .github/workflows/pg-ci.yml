@@ -1253,24 +1253,40 @@ jobs:
       #
       # - Run both in same script to increase parallelism, use -k to get
       #   result of both
-      # - Use -fmax-errors, as particularly cpluspluscheck can be very verbose
+      # - Limit the number of reported errors, as particularly
+      #   cpluspluscheck can be very verbose (the option for that is
+      #   spelled differently for gcc and clang)
+      # - Run the checks with both compilers, they diagnose meaningfully
+      #   different things in headers, especially in C++ mode
       ###
-      - name: headerscheck + cpluspluscheck
+      - name: headerscheck + cpluspluscheck (gcc)
         if: ${{ !cancelled() }}
-        run: |
+        env:
+          CONF: ${{env.LINUX_CONFIGURE_FEATURES}} --cache gcc.cache --enable-cassert
+          CC: ccache gcc
+          CXX: ccache g++
+          HEADERSCHECK_EXTRAFLAGS: -fmax-errors=10
+        run: &headerscheck_cmd |
           echo "::group::configure"
           ./configure \
-            ${{env.LINUX_CONFIGURE_FEATURES}} \
-            --cache gcc.cache \
-            --enable-cassert \
+            ${{env.CONF}} \
             --quiet \
-            CC="ccache gcc" CXX="ccache g++" CLANG="ccache clang"
+            CLANG="ccache clang"
           echo "::endgroup::"
 
           make -s -j${{env.BUILD_JOBS}} clean
           make -s -j${{env.BUILD_JOBS}} -k ${{env.CHECKFLAGS}} \
             headerscheck cpluspluscheck \
-            EXTRAFLAGS='-fmax-errors=10'
+            EXTRAFLAGS="${{env.HEADERSCHECK_EXTRAFLAGS}}"
+
+      - name: headerscheck + cpluspluscheck (clang)
+        if: ${{ !cancelled() }}
+        env:
+          CONF: ${{env.LINUX_CONFIGURE_FEATURES}} --cache clang.cache --enable-cassert
+          CC: ccache clang
+          CXX: ccache clang++
+          HEADERSCHECK_EXTRAFLAGS: -ferror-limit=10
+        run: *headerscheck_cmd
 
       - *ccache_decide_save_step
       - *ccache_save_step
