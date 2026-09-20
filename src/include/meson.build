@@ -157,6 +157,21 @@ header_subdirs = [
   'portability',
 ]
 
+# These are not really headers meant for use by other code, but generated
+# data tables that are included by exactly one .c file each.  They have no
+# include guards, which is a good indication that they are not meant to be
+# included by anything else, so don't install them.  Keep in sync with
+# src/include/Makefile.
+noinstall_common_headers = [
+  'unicode_case_table.h',
+  'unicode_category_table.h',
+  'unicode_east_asian_fw_table.h',
+  'unicode_nonspacing_table.h',
+  'unicode_norm_hashfunc.h',
+  'unicode_norm_table.h',
+  'unicode_normprops_table.h',
+]
+
 # XXX: installing headers this way has the danger of installing editor files
 # etc, unfortunately install_subdir() doesn't allow including / excluding by
 # pattern currently.
@@ -164,8 +179,12 @@ foreach d : header_subdirs
   if d == 'catalog'
     continue
   endif
+  exclude_files = ['.gitignore', 'meson.build']
+  if d == 'common'
+    exclude_files += noinstall_common_headers
+  endif
   install_subdir(d, install_dir: dir_include_server,
-                 exclude_files: ['.gitignore', 'meson.build'])
+                 exclude_files: exclude_files)
 endforeach
 
 install_subdir('catalog',

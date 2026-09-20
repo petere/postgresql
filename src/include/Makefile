@@ -58,6 +58,24 @@ SUBDIRS = \
 	port/win32/sys \
 	portability
 
+# These are not really headers meant for use by other code, but generated
+# data tables that are included by exactly one .c file each.  They have no
+# include guards, which is a good indication that they are not meant to be
+# included by anything else, so don't install them.  Keep in sync with
+# src/include/meson.build.
+NOINSTALL_COMMON_HEADERS = \
+	unicode_case_table.h \
+	unicode_category_table.h \
+	unicode_east_asian_fw_table.h \
+	unicode_nonspacing_table.h \
+	unicode_norm_hashfunc.h \
+	unicode_norm_table.h \
+	unicode_normprops_table.h
+
+COMMON_HEADERS = $(filter-out \
+	$(addprefix $(srcdir)/common/, $(NOINSTALL_COMMON_HEADERS)), \
+	$(wildcard $(srcdir)/common/*.h))
+
 # Install all headers
 install: all installdirs
 # These headers are needed by the public headers of the interfaces.
@@ -81,8 +99,10 @@ install: all installdirs
 	$(INSTALL_DATA) utils/fmgrprotos.h '$(DESTDIR)$(includedir_server)/utils'
 	$(INSTALL_DATA) $(srcdir)/*.h '$(DESTDIR)$(includedir_server)'
 	for dir in $(SUBDIRS); do \
+	  test "$$dir" = common && continue; \
 	  $(INSTALL_DATA) $(srcdir)/$$dir/*.h '$(DESTDIR)$(includedir_server)'/$$dir || exit; \
 	done
+	$(INSTALL_DATA) $(COMMON_HEADERS) '$(DESTDIR)$(includedir_server)/common'
 ifeq ($(vpath_build),yes)
 	for file in storage/lwlocknames.h utils/probes.h utils/wait_event_types.h; do \
 	  $(INSTALL_DATA) $$file '$(DESTDIR)$(includedir_server)'/$$file || exit; \
