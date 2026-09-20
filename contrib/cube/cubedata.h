@@ -1,5 +1,8 @@
 /* contrib/cube/cubedata.h */
 
+#ifndef CUBEDATA_H
+#define CUBEDATA_H
+
 /*
  * This limit is pretty arbitrary, but don't make it so large that you
  * risk overflow in sizing calculations.
@@ -77,3 +80,5 @@ extern void cube_scanner_finish(yyscan_t yyscanner);
 extern int	cube_yyparse(NDBOX **result, Size scanbuflen,
 						 struct Node *escontext,
 						 yyscan_t yyscanner);
+
+#endif							/* CUBEDATA_H */

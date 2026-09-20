@@ -29,6 +29,9 @@
  * contrib/pgcrypto/pgp.h
  */
 
+#ifndef __PGP_H
+#define __PGP_H
+
 #include "lib/stringinfo.h"
 
 #include "mbuf.h"
@@ -328,3 +331,5 @@ int			pgp_rsa_encrypt(PGP_PubKey *pk, PGP_MPI *_m, PGP_MPI **c_p);
 int			pgp_rsa_decrypt(PGP_PubKey *pk, PGP_MPI *_c, PGP_MPI **m_p);
 
 extern struct PullFilterOps pgp_decrypt_filter;
+
+#endif							/* __PGP_H */

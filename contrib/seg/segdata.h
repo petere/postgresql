@@ -1,6 +1,9 @@
 /*
  * contrib/seg/segdata.h
  */
+#ifndef SEGDATA_H
+#define SEGDATA_H
+
 typedef struct SEG
 {
 	float4		lower;
@@ -28,3 +31,5 @@ extern void seg_scanner_finish(yyscan_t yyscanner);
 
 /* in segparse.y */
 extern int	seg_yyparse(SEG *result, struct Node *escontext, yyscan_t yyscanner);
+
+#endif							/* SEGDATA_H */
