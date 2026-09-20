@@ -1262,6 +1262,7 @@ jobs:
           ./configure \
             ${{env.LINUX_CONFIGURE_FEATURES}} \
             --cache gcc.cache \
+            --enable-cassert \
             --quiet \
             CC="ccache gcc" CXX="ccache g++" CLANG="ccache clang"
           echo "::endgroup::"
