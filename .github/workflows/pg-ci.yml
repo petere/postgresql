@@ -1298,16 +1298,19 @@ jobs:
       #
       # - Run both in the same ninja invocation to increase parallelism, use
       #   -k 0 to get the result of both
-      # - Use -fmax-errors, as particularly cpluspluscheck can be very verbose
+      # - Limit the number of reported errors, as particularly
+      #   cpluspluscheck can be very verbose
+      # - Run the checks with both compilers, they diagnose meaningfully
+      #   different things in headers, especially in C++ mode
       ###
-      - name: headerscheck + cpluspluscheck
+      - name: headerscheck + cpluspluscheck (gcc)
         if: ${{ !cancelled() }}
         env:
           CONF: ${{env.MESON_COMMON_FEATURES}} ${{env.MESON_FEATURES}}
           CC: ccache gcc
           CXX: ccache g++
           EXTRAFLAGS: -fmax-errors=10
-        run: |
+        run: &headerscheck_cmd |
           echo "::group::configure"
           rm -rf build
           meson setup \
@@ -1320,6 +1323,15 @@ jobs:
 
           ninja -C build --quiet -k 0 \
             headerscheck cpluspluscheck
+
+      - name: headerscheck + cpluspluscheck (clang)
+        if: ${{ !cancelled() }}
+        env:
+          CONF: ${{env.MESON_COMMON_FEATURES}} ${{env.MESON_FEATURES}}
+          CC: ccache clang
+          CXX: ccache clang++
+          HEADERSCHECK_EXTRAFLAGS: -ferror-limit=10
+        run: *headerscheck_cmd
 
       - *ccache_decide_save_step
       - *ccache_save_step
