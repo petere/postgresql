@@ -151,8 +151,12 @@ do
 	test "$f" = contrib/isn/UPC.h && continue
 
 	test "$f" = src/include/common/unicode_case_table.h && continue
+	test "$f" = src/include/common/unicode_category_table.h && continue
 	test "$f" = src/include/common/unicode_nonspacing_table.h && continue
 	test "$f" = src/include/common/unicode_east_asian_fw_table.h && continue
+	test "$f" = src/include/common/unicode_norm_hashfunc.h && continue
+	test "$f" = src/include/common/unicode_norm_table.h && continue
+	test "$f" = src/include/common/unicode_normprops_table.h && continue
 
 	test "$f" = src/include/catalog/syscache_ids.h && continue
 	test "$f" = src/include/catalog/syscache_info.h && continue
@@ -175,8 +179,10 @@ do
 	test "$f" = src/interfaces/ecpg/preproc/preproc.h && continue
 	test "$f" = src/test/isolation/specparse.h && continue
 
-	# This produces a "no previous prototype" warning.
-	! $cplusplus && test "$f" = src/include/storage/checksum_impl.h && continue
+	# checksum_impl.h contains the checksum function definitions, so it is
+	# meant to be included exactly once.  It also produces a "no previous
+	# prototype" warning when compiled on its own.
+	test "$f" = src/include/storage/checksum_impl.h && continue
 
 	# SectionMemoryManager.h is C++
 	test "$f" = src/include/jit/SectionMemoryManager.h && continue
@@ -184,10 +190,17 @@ do
 	# ppport.h is not under our control, so we can't make it standalone.
 	test "$f" = src/pl/plperl/ppport.h && continue
 
+	# pg_bsd_indent is kept close to the FreeBSD sources it was imported
+	# from, so don't add an include guard to this one.
+	test "$f" = src/tools/pg_bsd_indent/indent_globs.h && continue
+
 	# regression.h is not actually C, but ECPG code.
 	test "$f" = src/interfaces/ecpg/test/regression.h && continue
 	# printf_hack.h produces "unused function" warnings.
 	test "$f" = src/interfaces/ecpg/test/printf_hack.h && continue
+	# These are inputs for the ECPG tests, not general-purpose headers.
+	test "$f" = src/interfaces/ecpg/test/preproc/strings.h && continue
+	test "$f" = src/interfaces/ecpg/test/preproc/struct.h && continue
 
 	if $cplusplus; then
 		# pg_trace.h and utils/probes.h can include sys/sdt.h from SystemTap,
@@ -246,6 +259,7 @@ do
 		*)
 		    echo '#include "postgres.h"' ;;
 	    esac
+	    echo "#include \"$f\""
 	    echo "#include \"$f\""
 	    $cplusplus && echo '};'
 	} >$tmp/$test_file_name.$ext
