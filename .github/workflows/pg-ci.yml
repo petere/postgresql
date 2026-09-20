@@ -1312,6 +1312,7 @@ jobs:
           rm -rf build
           meson setup \
             -Dwerror=true \
+            -Dcassert=true \
             -Ddebug=false \
             ${{env.CONF}} \
             build
