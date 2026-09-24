@@ -65,9 +65,9 @@ static void dropTablespaces(PGconn *conn);
 static void dumpTablespaces(PGconn *conn);
 static void dropDBs(PGconn *conn);
 static void dumpUserConfig(PGconn *conn, const char *username);
-static void dumpDatabases(PGconn *conn);
+static void dumpDatabases(PGconn *conn, const char *filename);
 static void dumpTimestamp(const char *msg);
-static int	runPgDump(const char *dbname, const char *create_opts);
+static int	runPgDump(const char *dbname, const char *create_opts, const char *filename);
 static void buildShSecLabels(PGconn *conn,
 							 const char *catalog_name, Oid objectId,
 							 const char *objtype, const char *objname,
@@ -117,7 +117,6 @@ static char role_catalog[10];
 #define PG_ROLES  "pg_roles "
 
 static FILE *OPF;
-static char *filename = NULL;
 
 static SimpleStringList database_exclude_patterns = {NULL, NULL};
 static SimpleStringList database_exclude_names = {NULL, NULL};
@@ -191,6 +190,7 @@ main(int argc, char *argv[])
 		{NULL, 0, NULL, 0}
 	};
 
+	char	   *filename = NULL;
 	char	   *pghost = NULL;
 	char	   *pgport = NULL;
 	char	   *pguser = NULL;
@@ -677,7 +677,7 @@ main(int argc, char *argv[])
 	fprintf(OPF, "\\unrestrict %s\n\n", restrict_key);
 
 	if (!globals_only && !roles_only && !tablespaces_only)
-		dumpDatabases(conn);
+		dumpDatabases(conn, filename);
 
 	PQfinish(conn);
 
@@ -1602,7 +1602,7 @@ expand_dbname_patterns(PGconn *conn,
  * Dump contents of databases.
  */
 static void
-dumpDatabases(PGconn *conn)
+dumpDatabases(PGconn *conn, const char *filename)
 {
 	PGresult   *res;
 	int			i;
@@ -1676,7 +1676,7 @@ dumpDatabases(PGconn *conn)
 		if (filename)
 			fclose(OPF);
 
-		ret = runPgDump(dbname, create_opts);
+		ret = runPgDump(dbname, create_opts, filename);
 		if (ret != 0)
 			pg_fatal("pg_dump failed on database \"%s\", exiting", dbname);
 
@@ -1698,7 +1698,7 @@ dumpDatabases(PGconn *conn)
  * Run pg_dump on dbname, with specified options.
  */
 static int
-runPgDump(const char *dbname, const char *create_opts)
+runPgDump(const char *dbname, const char *create_opts, const char *filename)
 {
 	PQExpBufferData connstrbuf;
 	PQExpBufferData cmd;
