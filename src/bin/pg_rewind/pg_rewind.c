@@ -47,7 +47,7 @@ static void digestControlFile(ControlFileData *ControlFile,
 							  const char *content, size_t size);
 static void getRestoreCommand(const char *argv0);
 static void sanityChecks(void);
-static TimeLineHistoryEntry *getTimelineHistory(TimeLineID tli, bool is_source,
+static TimeLineHistoryEntry *getTimelineHistory(TimeLineID tli, rewind_source *source,
 												int *nentries);
 static void findCommonAncestorTimeline(TimeLineHistoryEntry *a_history,
 									   int a_nentries,
@@ -87,7 +87,6 @@ uint64		fetch_size;
 uint64		fetch_done;
 
 static PGconn *conn;
-static rewind_source *source;
 
 static void
 usage(const char *progname)
@@ -140,6 +139,7 @@ main(int argc, char **argv)
 	};
 	int			option_index;
 	int			c;
+	rewind_source *source;
 	XLogRecPtr	divergerec;
 	int			lastcommontliIndex;
 	XLogRecPtr	chkptrec;
@@ -393,8 +393,8 @@ main(int argc, char **argv)
 		 * Retrieve timelines for both source and target, and find the point
 		 * where they diverged.
 		 */
-		sourceHistory = getTimelineHistory(source_tli, true, &sourceNentries);
-		targetHistory = getTimelineHistory(target_tli, false, &targetNentries);
+		sourceHistory = getTimelineHistory(source_tli, source, &sourceNentries);
+		targetHistory = getTimelineHistory(target_tli, NULL, &targetNentries);
 
 		findCommonAncestorTimeline(sourceHistory, sourceNentries,
 								   targetHistory, targetNentries,
@@ -986,7 +986,7 @@ MinXLogRecPtr(XLogRecPtr a, XLogRecPtr b)
  * Retrieve timeline history for the source or target system.
  */
 static TimeLineHistoryEntry *
-getTimelineHistory(TimeLineID tli, bool is_source, int *nentries)
+getTimelineHistory(TimeLineID tli, rewind_source *source, int *nentries)
 {
 	TimeLineHistoryEntry *history;
 
@@ -1009,7 +1009,7 @@ getTimelineHistory(TimeLineID tli, bool is_source, int *nentries)
 		TLHistoryFilePath(path, tli);
 
 		/* Get history file from appropriate source */
-		if (is_source)
+		if (source)
 			histfile = source->fetch_file(source, path, NULL);
 		else
 			histfile = slurpFile(datadir_target, path, NULL);
@@ -1023,7 +1023,7 @@ getTimelineHistory(TimeLineID tli, bool is_source, int *nentries)
 	{
 		int			i;
 
-		if (is_source)
+		if (source)
 			pg_log_debug("Source timeline history:");
 		else
 			pg_log_debug("Target timeline history:");
