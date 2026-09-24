@@ -154,9 +154,6 @@ static bool dosync = true;		/* Issue fsync() to make dump durable on disk. */
 
 static Oid	g_last_builtin_oid; /* value of the last builtin oid */
 
-/* The specified names/patterns should to match at least one entity */
-static int	strict_names = 0;
-
 static pg_compress_algorithm compression_algorithm = PG_COMPRESSION_NONE;
 
 /*
@@ -453,6 +450,9 @@ main(int argc, char **argv)
 	bool		no_statistics = false;
 
 	static DumpOptions dopt;
+
+	/* The specified names/patterns should to match at least one entity */
+	static int strict_names = 0;
 
 	static struct option long_options[] = {
 		{"data-only", no_argument, NULL, 'a'},
