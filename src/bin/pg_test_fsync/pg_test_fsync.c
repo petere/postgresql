@@ -63,6 +63,10 @@ do { \
 	print_elapse(start_t, stop_t, ops); \
 } while (0)
 
+#define TIMER_DECLS \
+static struct timeval start_t, \
+			stop_t
+
 
 static const char *progname;
 
@@ -70,8 +74,6 @@ static unsigned int secs_per_test = 5;
 static int	needs_unlink = 0;
 alignas(PGAlignedXLogBlock) static char buf[DEFAULT_XLOG_SEG_SIZE];
 static char *filename = FSYNC_FILENAME;
-static struct timeval start_t,
-			stop_t;
 static sig_atomic_t alarm_triggered = false;
 
 
@@ -284,6 +286,7 @@ open_direct(const char *path, int flags, mode_t mode)
 static void
 test_sync(int writes_per_op)
 {
+	TIMER_DECLS;
 	int			tmpfile,
 				ops,
 				writes;
@@ -463,6 +466,7 @@ test_open_syncs(void)
 static void
 test_open_sync(const char *msg, int writes_size)
 {
+	TIMER_DECLS;
 #ifdef O_SYNC
 	int			tmpfile,
 				ops,
@@ -499,6 +503,7 @@ test_open_sync(const char *msg, int writes_size)
 static void
 test_file_descriptor_sync(void)
 {
+	TIMER_DECLS;
 	int			tmpfile,
 				ops;
 
@@ -568,6 +573,7 @@ test_file_descriptor_sync(void)
 static void
 test_non_sync(void)
 {
+	TIMER_DECLS;
 	int			tmpfile,
 				ops;
 
