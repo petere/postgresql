@@ -336,8 +336,8 @@ int			PGTYPEStimestamp_defmt_scan(char **str, char *fmt, timestamp * d,
 
 extern char *pgtypes_date_weekdays_short[];
 extern char *pgtypes_date_months[];
-extern char *months[];
-extern char *days[];
+extern char *month_abbrevs[];
+extern char *day_names[];
 extern const int day_tab[2][13];
 
 #endif							/* DT_H */

@@ -490,9 +490,9 @@ static const datetkn *datecache[MAXDATEFIELDS] = {NULL};
 
 static const datetkn *deltacache[MAXDATEFIELDS] = {NULL};
 
-char	   *months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", NULL};
+char	   *month_abbrevs[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", NULL};
 
-char	   *days[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", NULL};
+char	   *day_names[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", NULL};
 
 char	   *pgtypes_date_weekdays_short[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", NULL};
 
@@ -898,13 +898,13 @@ EncodeDateTime(struct tm *tm, fsec_t fsec, bool print_tz, int tz, const char *tz
 			day = date2j(tm->tm_year, tm->tm_mon, tm->tm_mday);
 			tm->tm_wday = (int) ((day + date2j(2000, 1, 1) + 1) % 7);
 
-			memcpy(str, days[tm->tm_wday], 3);
+			memcpy(str, day_names[tm->tm_wday], 3);
 			strcpy(str + 3, " ");
 
 			if (EuroDates)
-				sprintf(str + 4, "%02d %3s", tm->tm_mday, months[tm->tm_mon - 1]);
+				sprintf(str + 4, "%02d %3s", tm->tm_mday, month_abbrevs[tm->tm_mon - 1]);
 			else
-				sprintf(str + 4, "%3s %02d", months[tm->tm_mon - 1], tm->tm_mday);
+				sprintf(str + 4, "%3s %02d", month_abbrevs[tm->tm_mon - 1], tm->tm_mday);
 
 			sprintf(str + 10, " %02d:%02d", tm->tm_hour, tm->tm_min);
 
@@ -2603,13 +2603,13 @@ PGTYPEStimestamp_defmt_scan(char **str, char *fmt, timestamp * d,
 				pfmt++;
 				err = 1;
 				j = 0;
-				while (days[j])
+				while (day_names[j])
 				{
-					if (strncmp(days[j], pstr, strlen(days[j])) == 0)
+					if (strncmp(day_names[j], pstr, strlen(day_names[j])) == 0)
 					{
 						/* found it */
 						err = 0;
-						pstr += strlen(days[j]);
+						pstr += strlen(day_names[j]);
 						break;
 					}
 					j++;
@@ -2620,13 +2620,13 @@ PGTYPEStimestamp_defmt_scan(char **str, char *fmt, timestamp * d,
 				pfmt++;
 				err = 1;
 				j = 0;
-				while (months[j])
+				while (month_abbrevs[j])
 				{
-					if (strncmp(months[j], pstr, strlen(months[j])) == 0)
+					if (strncmp(month_abbrevs[j], pstr, strlen(month_abbrevs[j])) == 0)
 					{
 						/* found it */
 						err = 0;
-						pstr += strlen(months[j]);
+						pstr += strlen(month_abbrevs[j]);
 						*month = j + 1;
 						break;
 					}

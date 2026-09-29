@@ -230,7 +230,7 @@ PGTYPESdate_fmt_asc(date dDate, const char *fmtstring, char *outbuf)
 					replace_type = PGTYPES_TYPE_UINT_2_LZ;
 					break;
 				case PGTYPES_FMTDATE_MONTH_LITERAL_SHORT:
-					replace_val.str_val = months[tm.tm_mon - 1];
+					replace_val.str_val = month_abbrevs[tm.tm_mon - 1];
 					replace_type = PGTYPES_TYPE_STRING_CONSTANT;
 					break;
 				case PGTYPES_FMTDATE_MONTH_DIGITS_LZ:
@@ -629,7 +629,7 @@ PGTYPESdate_defmt_asc(date * d, const char *fmt, const char *str)
 			{
 				if (list[i + 1] == NULL)
 				{
-					list = months;
+					list = month_abbrevs;
 					i = -1;
 				}
 			}

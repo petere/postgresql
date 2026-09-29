@@ -324,14 +324,14 @@ dttofmtasc_replace(timestamp * ts, date dDate, int dow, struct tm *tm,
 					/* the full name of the day in the week */
 					/* XXX should be locale aware */
 				case 'A':
-					replace_val.str_val = days[dow];
+					replace_val.str_val = day_names[dow];
 					replace_type = PGTYPES_TYPE_STRING_CONSTANT;
 					break;
 					/* the abbreviated name of the month */
 					/* XXX should be locale aware */
 				case 'b':
 				case 'h':
-					replace_val.str_val = months[tm->tm_mon - 1];
+					replace_val.str_val = month_abbrevs[tm->tm_mon - 1];
 					replace_type = PGTYPES_TYPE_STRING_CONSTANT;
 					break;
 					/* the full name of the month */

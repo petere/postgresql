@@ -258,9 +258,9 @@ do { \
  * Include check for leap year.
  */
 
-extern PGDLLIMPORT const char *const months[];	/* months (3-char
+extern PGDLLIMPORT const char *const month_abbrevs[];	/* months (3-char
 												 * abbreviations) */
-extern PGDLLIMPORT const char *const days[];	/* days (full names) */
+extern PGDLLIMPORT const char *const day_names[];	/* days (full names) */
 extern PGDLLIMPORT const int day_tab[2][13];
 
 /*

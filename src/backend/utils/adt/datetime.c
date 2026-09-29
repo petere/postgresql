@@ -79,10 +79,10 @@ const int	day_tab[2][13] =
 	{31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, 0}
 };
 
-const char *const months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+const char *const month_abbrevs[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", NULL};
 
-const char *const days[] = {"Sunday", "Monday", "Tuesday", "Wednesday",
+const char *const day_names[] = {"Sunday", "Monday", "Tuesday", "Wednesday",
 "Thursday", "Friday", "Saturday", NULL};
 
 
@@ -4600,19 +4600,19 @@ EncodeDateTime(struct pg_tm *tm, fsec_t fsec, bool print_tz, int tz, const char 
 			/* Backward-compatible with traditional Postgres abstime dates */
 			day = date2j(tm->tm_year, tm->tm_mon, tm->tm_mday);
 			tm->tm_wday = j2day(day);
-			memcpy(str, days[tm->tm_wday], 3);
+			memcpy(str, day_names[tm->tm_wday], 3);
 			str += 3;
 			*str++ = ' ';
 			if (DateOrder == DATEORDER_DMY)
 			{
 				str = pg_ultostr_zeropad(str, tm->tm_mday, 2);
 				*str++ = ' ';
-				memcpy(str, months[tm->tm_mon - 1], 3);
+				memcpy(str, month_abbrevs[tm->tm_mon - 1], 3);
 				str += 3;
 			}
 			else
 			{
-				memcpy(str, months[tm->tm_mon - 1], 3);
+				memcpy(str, month_abbrevs[tm->tm_mon - 1], 3);
 				str += 3;
 				*str++ = ' ';
 				str = pg_ultostr_zeropad(str, tm->tm_mday, 2);

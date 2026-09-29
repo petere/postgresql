@@ -2802,7 +2802,7 @@ DCH_to_char(const FormatNode *node, bool is_interval, Oid collid,
 				if (IS_SUFFIX_TM(n->suffix))
 					DCH_EMITS(str_toupper_z(localized_abbrev_months[tm->tm_mon - 1], collid));
 				else
-					DCH_EMITS(asc_toupper_z(months[tm->tm_mon - 1]));
+					DCH_EMITS(asc_toupper_z(month_abbrevs[tm->tm_mon - 1]));
 				break;
 			case DCH_Mon:
 				INVALID_FOR_INTERVAL;
@@ -2811,7 +2811,7 @@ DCH_to_char(const FormatNode *node, bool is_interval, Oid collid,
 				if (IS_SUFFIX_TM(n->suffix))
 					DCH_EMITS(str_initcap_z(localized_abbrev_months[tm->tm_mon - 1], collid));
 				else
-					DCH_EMITS(months[tm->tm_mon - 1]);
+					DCH_EMITS(month_abbrevs[tm->tm_mon - 1]);
 				break;
 			case DCH_mon:
 				INVALID_FOR_INTERVAL;
@@ -2820,7 +2820,7 @@ DCH_to_char(const FormatNode *node, bool is_interval, Oid collid,
 				if (IS_SUFFIX_TM(n->suffix))
 					DCH_EMITS(str_tolower_z(localized_abbrev_months[tm->tm_mon - 1], collid));
 				else
-					DCH_EMITS(asc_tolower_z(months[tm->tm_mon - 1]));
+					DCH_EMITS(asc_tolower_z(month_abbrevs[tm->tm_mon - 1]));
 				break;
 			case DCH_MM:
 				DCH_EMITF("%0*d", IS_SUFFIX_FM(n->suffix) ? 0 : (tm->tm_mon >= 0) ? 2 : 3,
@@ -2834,7 +2834,7 @@ DCH_to_char(const FormatNode *node, bool is_interval, Oid collid,
 					DCH_EMITS(str_toupper_z(localized_full_days[tm->tm_wday], collid));
 				else
 					DCH_EMITF("%*s", IS_SUFFIX_FM(n->suffix) ? 0 : -9,
-							  asc_toupper_z(days[tm->tm_wday]));
+							  asc_toupper_z(day_names[tm->tm_wday]));
 				break;
 			case DCH_Day:
 				INVALID_FOR_INTERVAL;
@@ -2842,7 +2842,7 @@ DCH_to_char(const FormatNode *node, bool is_interval, Oid collid,
 					DCH_EMITS(str_initcap_z(localized_full_days[tm->tm_wday], collid));
 				else
 					DCH_EMITF("%*s", IS_SUFFIX_FM(n->suffix) ? 0 : -9,
-							  days[tm->tm_wday]);
+							  day_names[tm->tm_wday]);
 				break;
 			case DCH_day:
 				INVALID_FOR_INTERVAL;
@@ -2850,7 +2850,7 @@ DCH_to_char(const FormatNode *node, bool is_interval, Oid collid,
 					DCH_EMITS(str_tolower_z(localized_full_days[tm->tm_wday], collid));
 				else
 					DCH_EMITF("%*s", IS_SUFFIX_FM(n->suffix) ? 0 : -9,
-							  asc_tolower_z(days[tm->tm_wday]));
+							  asc_tolower_z(day_names[tm->tm_wday]));
 				break;
 			case DCH_DY:
 				INVALID_FOR_INTERVAL;
@@ -3424,7 +3424,7 @@ DCH_from_char(FormatNode *node, const char *in, TmFromChar *out,
 			case DCH_MON:
 			case DCH_Mon:
 			case DCH_mon:
-				if (!from_char_seq_search(&value, &s, months,
+				if (!from_char_seq_search(&value, &s, month_abbrevs,
 										  IS_SUFFIX_TM(n->suffix) ? localized_abbrev_months : NULL,
 										  collid,
 										  n, escontext))
@@ -3440,7 +3440,7 @@ DCH_from_char(FormatNode *node, const char *in, TmFromChar *out,
 			case DCH_DAY:
 			case DCH_Day:
 			case DCH_day:
-				if (!from_char_seq_search(&value, &s, days,
+				if (!from_char_seq_search(&value, &s, day_names,
 										  IS_SUFFIX_TM(n->suffix) ? localized_full_days : NULL,
 										  collid,
 										  n, escontext))
