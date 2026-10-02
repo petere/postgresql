@@ -135,73 +135,93 @@ static const char *const auth_methods_local[] = {
 static char *share_path = NULL;
 
 /* values to be obtained from arguments */
-static char *pg_data = NULL;
-static char *encoding = NULL;
-static char *locale = NULL;
-static char *lc_collate = NULL;
-static char *lc_ctype = NULL;
-static char *lc_monetary = NULL;
-static char *lc_numeric = NULL;
-static char *lc_time = NULL;
-static char *lc_messages = NULL;
-static char locale_provider = COLLPROVIDER_LIBC;
-static bool builtin_locale_specified = false;
-static char *datlocale = NULL;
-static bool icu_locale_specified = false;
-static char *icu_rules = NULL;
-static const char *default_text_search_config = NULL;
-static char *username = NULL;
-static bool pwprompt = false;
-static char *pwfilename = NULL;
-static char *superuser_password = NULL;
-static const char *authmethodhost = NULL;
-static const char *authmethodlocal = NULL;
-static _stringlist *extra_guc_names = NULL;
-static _stringlist *extra_guc_values = NULL;
+
+struct cluster_settings
+{
+	char *pg_data;
+	char *encoding;
+	char *locale;
+	char *lc_collate;
+	char *lc_ctype;
+	char *lc_monetary;
+	char *lc_numeric;
+	char *lc_time;
+	char *lc_messages;
+	char locale_provider;
+	char *datlocale;
+	char *icu_rules;
+	const char *default_text_search_config;
+	char *username;
+	bool pwprompt;
+	char *pwfilename;
+	char *superuser_password;
+	const char *authmethodhost;
+	const char *authmethodlocal;
+	_stringlist *extra_guc_names;
+	_stringlist *extra_guc_values;
+	bool data_checksums;
+	char *xlog_dir;
+	int	wal_segment_size_mb;
+	int	encodingid;
+	int	n_connections;
+	int	n_av_slots;
+	int	n_buffers;
+	const char *dynamic_shared_memory_type;
+	const char *default_timezone;
+};
+
+static struct cluster_settings cluster_settings = {
+	/* defaults */
+	.locale_provider = COLLPROVIDER_LIBC,
+	.data_checksums = true,
+	.wal_segment_size_mb = (DEFAULT_XLOG_SEG_SIZE) / (1024 * 1024),
+	.n_connections = 10,
+	.n_av_slots = 16,
+	.n_buffers = 50,
+};
+
 static bool debug = false;
 static bool noclean = false;
-static bool noinstructions = false;
-static bool do_sync = true;
-static bool sync_only = false;
 static bool show_setting = false;
-static bool data_checksums = true;
-static char *xlog_dir = NULL;
-static int	wal_segment_size_mb = (DEFAULT_XLOG_SEG_SIZE) / (1024 * 1024);
 static DataDirSyncMethod sync_method = DATA_DIR_SYNC_METHOD_FSYNC;
 static bool sync_data_files = true;
 
 
 /* internal vars */
 static const char *progname;
-static int	encodingid;
-static char *bki_file;
-static char *hba_file;
-static char *ident_file;
-static char *hosts_file;
-static char *conf_file;
-static char *dictionary_file;
-static char *info_schema_file;
-static char *features_file;
-static char *system_constraints_file;
-static char *system_functions_file;
-static char *system_views_file;
-static bool success = false;
-static bool made_new_pgdata = false;
-static bool found_existing_pgdata = false;
-static bool made_new_xlogdir = false;
-static bool found_existing_xlogdir = false;
-static char infoversion[100];
+
+struct input_files
+{
+	char *bki_file;
+	char *hba_file;
+	char *ident_file;
+	char *hosts_file;
+	char *conf_file;
+	char *dictionary_file;
+	char *info_schema_file;
+	char *features_file;
+	char *system_constraints_file;
+	char *system_functions_file;
+	char *system_views_file;
+};
+
+static struct input_files input_files = {};
+
+struct cleanup_info
+{
+	bool success;
+	bool made_new_pgdata;
+	bool found_existing_pgdata;
+	bool made_new_xlogdir;
+	bool found_existing_xlogdir;
+};
+
+static struct cleanup_info cleanup_info = {};
+
 static bool caught_signal = false;
 static bool output_failed = false;
 static int	output_errno = 0;
 static char *pgdata_native;
-
-/* defaults */
-static int	n_connections = 10;
-static int	n_av_slots = 16;
-static int	n_buffers = 50;
-static const char *dynamic_shared_memory_type = NULL;
-static const char *default_timezone = NULL;
 
 /*
  * Warning messages for authentication methods
@@ -287,7 +307,6 @@ static void setup_run_file(FILE *cmdfd, const char *filename);
 static void setup_description(FILE *cmdfd);
 static void setup_collation(FILE *cmdfd);
 static void setup_privileges(FILE *cmdfd);
-static void set_info_version(void);
 static void setup_schema(FILE *cmdfd);
 static void load_plpgsql(FILE *cmdfd);
 static void vacuum_db(FILE *cmdfd);
@@ -754,48 +773,48 @@ popen_check(const char *command, const char *mode)
 static void
 cleanup_directories_atexit(void)
 {
-	if (success)
+	if (cleanup_info.success)
 		return;
 
 	if (!noclean)
 	{
-		if (made_new_pgdata)
+		if (cleanup_info.made_new_pgdata)
 		{
-			pg_log_info("removing data directory \"%s\"", pg_data);
-			if (!rmtree(pg_data, true))
+			pg_log_info("removing data directory \"%s\"", cluster_settings.pg_data);
+			if (!rmtree(cluster_settings.pg_data, true))
 				pg_log_error("failed to remove data directory");
 		}
-		else if (found_existing_pgdata)
+		else if (cleanup_info.found_existing_pgdata)
 		{
 			pg_log_info("removing contents of data directory \"%s\"",
-						pg_data);
-			if (!rmtree(pg_data, false))
+						cluster_settings.pg_data);
+			if (!rmtree(cluster_settings.pg_data, false))
 				pg_log_error("failed to remove contents of data directory");
 		}
 
-		if (made_new_xlogdir)
+		if (cleanup_info.made_new_xlogdir)
 		{
-			pg_log_info("removing WAL directory \"%s\"", xlog_dir);
-			if (!rmtree(xlog_dir, true))
+			pg_log_info("removing WAL directory \"%s\"", cluster_settings.xlog_dir);
+			if (!rmtree(cluster_settings.xlog_dir, true))
 				pg_log_error("failed to remove WAL directory");
 		}
-		else if (found_existing_xlogdir)
+		else if (cleanup_info.found_existing_xlogdir)
 		{
-			pg_log_info("removing contents of WAL directory \"%s\"", xlog_dir);
-			if (!rmtree(xlog_dir, false))
+			pg_log_info("removing contents of WAL directory \"%s\"", cluster_settings.xlog_dir);
+			if (!rmtree(cluster_settings.xlog_dir, false))
 				pg_log_error("failed to remove contents of WAL directory");
 		}
 		/* otherwise died during startup, do nothing! */
 	}
 	else
 	{
-		if (made_new_pgdata || found_existing_pgdata)
+		if (cleanup_info.made_new_pgdata || cleanup_info.found_existing_pgdata)
 			pg_log_info("data directory \"%s\" not removed at user's request",
-						pg_data);
+						cluster_settings.pg_data);
 
-		if (made_new_xlogdir || found_existing_xlogdir)
+		if (cleanup_info.made_new_xlogdir || cleanup_info.found_existing_xlogdir)
 			pg_log_info("WAL directory \"%s\" not removed at user's request",
-						xlog_dir);
+						cluster_settings.xlog_dir);
 	}
 }
 
@@ -1022,9 +1041,9 @@ write_version_file(const char *extrapath)
 	char	   *path;
 
 	if (extrapath == NULL)
-		path = psprintf("%s/PG_VERSION", pg_data);
+		path = psprintf("%s/PG_VERSION", cluster_settings.pg_data);
 	else
-		path = psprintf("%s/%s/PG_VERSION", pg_data, extrapath);
+		path = psprintf("%s/%s/PG_VERSION", cluster_settings.pg_data, extrapath);
 
 	if ((version_file = fopen(path, PG_BINARY_W)) == NULL)
 		pg_fatal("could not open file \"%s\" for writing: %m", path);
@@ -1044,7 +1063,7 @@ set_null_conf(void)
 	FILE	   *conf_file;
 	char	   *path;
 
-	path = psprintf("%s/postgresql.conf", pg_data);
+	path = psprintf("%s/postgresql.conf", cluster_settings.pg_data);
 	conf_file = fopen(path, PG_BINARY_W);
 	if (conf_file == NULL)
 		pg_fatal("could not open file \"%s\" for writing: %m", path);
@@ -1151,8 +1170,8 @@ test_config_settings(void)
 	 */
 	printf(_("selecting dynamic shared memory implementation ... "));
 	fflush(stdout);
-	dynamic_shared_memory_type = choose_dsm_implementation();
-	printf("%s\n", dynamic_shared_memory_type);
+	cluster_settings.dynamic_shared_memory_type = choose_dsm_implementation();
+	printf("%s\n", cluster_settings.dynamic_shared_memory_type);
 
 	/*
 	 * Probe for max_connections before shared_buffers, since it is subject to
@@ -1165,10 +1184,10 @@ test_config_settings(void)
 	for (i = 0; i < connslen; i++)
 	{
 		test_conns = trial_conns[i];
-		n_av_slots = AV_SLOTS_FOR_CONNS(test_conns);
+		cluster_settings.n_av_slots = AV_SLOTS_FOR_CONNS(test_conns);
 		test_buffs = MIN_BUFS_FOR_CONNS(test_conns);
 
-		if (test_specific_config_settings(test_conns, n_av_slots, test_buffs))
+		if (test_specific_config_settings(test_conns, cluster_settings.n_av_slots, test_buffs))
 		{
 			ok_buffers = test_buffs;
 			break;
@@ -1176,9 +1195,9 @@ test_config_settings(void)
 	}
 	if (i >= connslen)
 		i = connslen - 1;
-	n_connections = trial_conns[i];
+	cluster_settings.n_connections = trial_conns[i];
 
-	printf("%d\n", n_connections);
+	printf("%d\n", cluster_settings.n_connections);
 
 	printf(_("selecting default \"shared_buffers\" ... "));
 	fflush(stdout);
@@ -1193,20 +1212,20 @@ test_config_settings(void)
 			break;
 		}
 
-		if (test_specific_config_settings(n_connections, n_av_slots, test_buffs))
+		if (test_specific_config_settings(cluster_settings.n_connections, cluster_settings.n_av_slots, test_buffs))
 			break;
 	}
-	n_buffers = test_buffs;
+	cluster_settings.n_buffers = test_buffs;
 
-	if ((n_buffers * (BLCKSZ / 1024)) % 1024 == 0)
-		printf("%dMB\n", (n_buffers * (BLCKSZ / 1024)) / 1024);
+	if ((cluster_settings.n_buffers * (BLCKSZ / 1024)) % 1024 == 0)
+		printf("%dMB\n", (cluster_settings.n_buffers * (BLCKSZ / 1024)) / 1024);
 	else
-		printf("%dkB\n", n_buffers * (BLCKSZ / 1024));
+		printf("%dkB\n", cluster_settings.n_buffers * (BLCKSZ / 1024));
 
 	printf(_("selecting default time zone ... "));
 	fflush(stdout);
-	default_timezone = select_default_timezone(share_path);
-	printf("%s\n", default_timezone ? default_timezone : "GMT");
+	cluster_settings.default_timezone = select_default_timezone(share_path);
+	printf("%s\n", cluster_settings.default_timezone ? cluster_settings.default_timezone : "GMT");
 }
 
 /*
@@ -1231,10 +1250,10 @@ test_specific_config_settings(int test_conns, int test_av_slots, int test_buffs)
 					  "-c dynamic_shared_memory_type=%s",
 					  backend_exec, boot_options, extra_options,
 					  test_conns, test_av_slots, test_buffs,
-					  dynamic_shared_memory_type);
+					  cluster_settings.dynamic_shared_memory_type);
 
 	/* Add any user-given setting overrides */
-	for (gnames = extra_guc_names, gvalues = extra_guc_values;
+	for (gnames = cluster_settings.extra_guc_names, gvalues = cluster_settings.extra_guc_values;
 		 gnames != NULL;		/* assume lists have the same length */
 		 gnames = gnames->next, gvalues = gvalues->next)
 	{
@@ -1260,7 +1279,7 @@ test_specific_config_settings(int test_conns, int test_av_slots, int test_buffs)
 static char *
 pretty_wal_size(int segment_count)
 {
-	int			sz = wal_segment_size_mb * segment_count;
+	int			sz = cluster_settings.wal_segment_size_mb * segment_count;
 	char	   *result = pg_malloc(14);
 
 	if ((sz % 1024) == 0)
@@ -1288,38 +1307,38 @@ setup_config(void)
 
 	/* postgresql.conf */
 
-	conflines = readfile(conf_file);
+	conflines = readfile(input_files.conf_file);
 
-	snprintf(repltok, sizeof(repltok), "%d", n_connections);
+	snprintf(repltok, sizeof(repltok), "%d", cluster_settings.n_connections);
 	conflines = replace_guc_value(conflines, "max_connections",
 								  repltok, false);
 
-	snprintf(repltok, sizeof(repltok), "%d", n_av_slots);
+	snprintf(repltok, sizeof(repltok), "%d", cluster_settings.n_av_slots);
 	conflines = replace_guc_value(conflines, "autovacuum_worker_slots",
 								  repltok, false);
 
-	if ((n_buffers * (BLCKSZ / 1024)) % 1024 == 0)
+	if ((cluster_settings.n_buffers * (BLCKSZ / 1024)) % 1024 == 0)
 		snprintf(repltok, sizeof(repltok), "%dMB",
-				 (n_buffers * (BLCKSZ / 1024)) / 1024);
+				 (cluster_settings.n_buffers * (BLCKSZ / 1024)) / 1024);
 	else
 		snprintf(repltok, sizeof(repltok), "%dkB",
-				 n_buffers * (BLCKSZ / 1024));
+				 cluster_settings.n_buffers * (BLCKSZ / 1024));
 	conflines = replace_guc_value(conflines, "shared_buffers",
 								  repltok, false);
 
 	conflines = replace_guc_value(conflines, "lc_messages",
-								  lc_messages, false);
+								  cluster_settings.lc_messages, false);
 
 	conflines = replace_guc_value(conflines, "lc_monetary",
-								  lc_monetary, false);
+								  cluster_settings.lc_monetary, false);
 
 	conflines = replace_guc_value(conflines, "lc_numeric",
-								  lc_numeric, false);
+								  cluster_settings.lc_numeric, false);
 
 	conflines = replace_guc_value(conflines, "lc_time",
-								  lc_time, false);
+								  cluster_settings.lc_time, false);
 
-	switch (locale_date_order(lc_time))
+	switch (locale_date_order(cluster_settings.lc_time))
 	{
 		case DATEORDER_YMD:
 			strcpy(repltok, "iso, ymd");
@@ -1336,20 +1355,20 @@ setup_config(void)
 								  repltok, false);
 
 	snprintf(repltok, sizeof(repltok), "pg_catalog.%s",
-			 default_text_search_config);
+			 cluster_settings.default_text_search_config);
 	conflines = replace_guc_value(conflines, "default_text_search_config",
 								  repltok, false);
 
-	if (default_timezone)
+	if (cluster_settings.default_timezone)
 	{
 		conflines = replace_guc_value(conflines, "timezone",
-									  default_timezone, false);
+									  cluster_settings.default_timezone, false);
 		conflines = replace_guc_value(conflines, "log_timezone",
-									  default_timezone, false);
+									  cluster_settings.default_timezone, false);
 	}
 
 	conflines = replace_guc_value(conflines, "dynamic_shared_memory_type",
-								  dynamic_shared_memory_type, false);
+								  cluster_settings.dynamic_shared_memory_type, false);
 
 	/* Caution: these depend on wal_segment_size_mb, they're not constants */
 	conflines = replace_guc_value(conflines, "min_wal_size",
@@ -1398,10 +1417,10 @@ setup_config(void)
 	 * Change password_encryption setting to md5 if md5 was chosen as an
 	 * authentication method, unless scram-sha-256 was also chosen.
 	 */
-	if ((strcmp(authmethodlocal, "md5") == 0 &&
-		 strcmp(authmethodhost, "scram-sha-256") != 0) ||
-		(strcmp(authmethodhost, "md5") == 0 &&
-		 strcmp(authmethodlocal, "scram-sha-256") != 0))
+	if ((strcmp(cluster_settings.authmethodlocal, "md5") == 0 &&
+		 strcmp(cluster_settings.authmethodhost, "scram-sha-256") != 0) ||
+		(strcmp(cluster_settings.authmethodhost, "md5") == 0 &&
+		 strcmp(cluster_settings.authmethodlocal, "scram-sha-256") != 0))
 	{
 		conflines = replace_guc_value(conflines, "password_encryption",
 									  "md5", false);
@@ -1427,7 +1446,7 @@ setup_config(void)
 	/*
 	 * Now replace anything that's overridden via -c switches.
 	 */
-	for (gnames = extra_guc_names, gvalues = extra_guc_values;
+	for (gnames = cluster_settings.extra_guc_names, gvalues = cluster_settings.extra_guc_values;
 		 gnames != NULL;		/* assume lists have the same length */
 		 gnames = gnames->next, gvalues = gvalues->next)
 	{
@@ -1436,7 +1455,7 @@ setup_config(void)
 	}
 
 	/* ... and write out the finished postgresql.conf file */
-	snprintf(path, sizeof(path), "%s/postgresql.conf", pg_data);
+	snprintf(path, sizeof(path), "%s/postgresql.conf", cluster_settings.pg_data);
 
 	writefile(path, conflines);
 	if (chmod(path, pg_file_create_mode) != 0)
@@ -1450,7 +1469,7 @@ setup_config(void)
 	conflines[1] = pg_strdup("# It will be overwritten by the ALTER SYSTEM command.\n");
 	conflines[2] = NULL;
 
-	sprintf(path, "%s/postgresql.auto.conf", pg_data);
+	sprintf(path, "%s/postgresql.auto.conf", cluster_settings.pg_data);
 
 	writefile(path, conflines);
 	if (chmod(path, pg_file_create_mode) != 0)
@@ -1459,7 +1478,7 @@ setup_config(void)
 
 	/* pg_hba.conf */
 
-	conflines = readfile(hba_file);
+	conflines = readfile(input_files.hba_file);
 
 	/*
 	 * Probe to see if there is really any platform support for IPv6, and
@@ -1505,16 +1524,16 @@ setup_config(void)
 	/* Replace default authentication methods */
 	conflines = replace_token(conflines,
 							  "@authmethodhost@",
-							  authmethodhost);
+							  cluster_settings.authmethodhost);
 	conflines = replace_token(conflines,
 							  "@authmethodlocal@",
-							  authmethodlocal);
+							  cluster_settings.authmethodlocal);
 
 	conflines = replace_token(conflines,
 							  "@authcomment@",
-							  (strcmp(authmethodlocal, "trust") == 0 || strcmp(authmethodhost, "trust") == 0) ? AUTHTRUST_WARNING : "");
+							  (strcmp(cluster_settings.authmethodlocal, "trust") == 0 || strcmp(cluster_settings.authmethodhost, "trust") == 0) ? AUTHTRUST_WARNING : "");
 
-	snprintf(path, sizeof(path), "%s/pg_hba.conf", pg_data);
+	snprintf(path, sizeof(path), "%s/pg_hba.conf", cluster_settings.pg_data);
 
 	writefile(path, conflines);
 	if (chmod(path, pg_file_create_mode) != 0)
@@ -1523,17 +1542,17 @@ setup_config(void)
 
 	/* pg_ident.conf */
 
-	conflines = readfile(ident_file);
+	conflines = readfile(input_files.ident_file);
 
-	snprintf(path, sizeof(path), "%s/pg_ident.conf", pg_data);
+	snprintf(path, sizeof(path), "%s/pg_ident.conf", cluster_settings.pg_data);
 
 	writefile(path, conflines);
 	if (chmod(path, pg_file_create_mode) != 0)
 		pg_fatal("could not change permissions of \"%s\": %m", path);
 
 	/* pg_hosts.conf */
-	conflines = readfile(hosts_file);
-	snprintf(path, sizeof(path), "%s/pg_hosts.conf", pg_data);
+	conflines = readfile(input_files.hosts_file);
+	snprintf(path, sizeof(path), "%s/pg_hosts.conf", cluster_settings.pg_data);
 
 	writefile(path, conflines);
 	if (chmod(path, pg_file_create_mode) != 0)
@@ -1559,7 +1578,7 @@ bootstrap_template1(void)
 	printf(_("running bootstrap script ... "));
 	fflush(stdout);
 
-	bki_lines = readfile(bki_file);
+	bki_lines = readfile(input_files.bki_file);
 
 	/* Check that bki file appears to be of the right version */
 
@@ -1569,7 +1588,7 @@ bootstrap_template1(void)
 	if (strcmp(headerline, *bki_lines) != 0)
 	{
 		pg_log_error("input file \"%s\" does not belong to PostgreSQL %s",
-					 bki_file, PG_VERSION);
+					 input_files.bki_file, PG_VERSION);
 		pg_log_error_hint("Specify the correct path using the option -L.");
 		exit(1);
 	}
@@ -1586,24 +1605,24 @@ bootstrap_template1(void)
 							  (sizeof(Pointer) == 4) ? "i" : "d");
 
 	bki_lines = replace_token(bki_lines, "POSTGRES",
-							  escape_quotes_bki(username));
+							  escape_quotes_bki(cluster_settings.username));
 
 	bki_lines = replace_token(bki_lines, "ENCODING",
-							  encodingid_to_string(encodingid));
+							  encodingid_to_string(cluster_settings.encodingid));
 
 	bki_lines = replace_token(bki_lines, "LC_COLLATE",
-							  escape_quotes_bki(lc_collate));
+							  escape_quotes_bki(cluster_settings.lc_collate));
 
 	bki_lines = replace_token(bki_lines, "LC_CTYPE",
-							  escape_quotes_bki(lc_ctype));
+							  escape_quotes_bki(cluster_settings.lc_ctype));
 
 	bki_lines = replace_token(bki_lines, "DATLOCALE",
-							  datlocale ? escape_quotes_bki(datlocale) : "_null_");
+							  cluster_settings.datlocale ? escape_quotes_bki(cluster_settings.datlocale) : "_null_");
 
 	bki_lines = replace_token(bki_lines, "ICU_RULES",
-							  icu_rules ? escape_quotes_bki(icu_rules) : "_null_");
+							  cluster_settings.icu_rules ? escape_quotes_bki(cluster_settings.icu_rules) : "_null_");
 
-	sprintf(buf, "%c", locale_provider);
+	sprintf(buf, "%c", cluster_settings.locale_provider);
 	bki_lines = replace_token(bki_lines, "LOCALE_PROVIDER", buf);
 
 	/* Also ensure backend isn't confused by this environment var: */
@@ -1612,8 +1631,8 @@ bootstrap_template1(void)
 	initPQExpBuffer(&cmd);
 
 	printfPQExpBuffer(&cmd, "\"%s\" --boot %s %s", backend_exec, boot_options, extra_options);
-	appendPQExpBuffer(&cmd, " -X %d", wal_segment_size_mb * (1024 * 1024));
-	if (data_checksums)
+	appendPQExpBuffer(&cmd, " -X %d", cluster_settings.wal_segment_size_mb * (1024 * 1024));
+	if (cluster_settings.data_checksums)
 		appendPQExpBufferStr(&cmd, " -k");
 	if (debug)
 		appendPQExpBufferStr(&cmd, " -d 5");
@@ -1647,9 +1666,9 @@ setup_auth(FILE *cmdfd)
 	 */
 	PG_CMD_PUTS("REVOKE ALL ON pg_authid FROM public;\n\n");
 
-	if (superuser_password)
+	if (cluster_settings.superuser_password)
 		PG_CMD_PRINTF("ALTER USER \"%s\" WITH PASSWORD E'%s';\n\n",
-					  username, escape_quotes(superuser_password));
+					  cluster_settings.username, escape_quotes(cluster_settings.superuser_password));
 }
 
 /*
@@ -1660,7 +1679,7 @@ get_su_pwd(void)
 {
 	char	   *pwd1;
 
-	if (pwprompt)
+	if (cluster_settings.pwprompt)
 	{
 		/*
 		 * Read password from terminal
@@ -1688,27 +1707,27 @@ get_su_pwd(void)
 		 * file permissions may not exist at all, so we'll skip the paranoia
 		 * for now.
 		 */
-		FILE	   *pwf = fopen(pwfilename, "r");
+		FILE	   *pwf = fopen(cluster_settings.pwfilename, "r");
 
 		if (!pwf)
 			pg_fatal("could not open file \"%s\" for reading: %m",
-					 pwfilename);
+					 cluster_settings.pwfilename);
 		pwd1 = pg_get_line(pwf, NULL);
 		if (!pwd1)
 		{
 			if (ferror(pwf))
 				pg_fatal("could not read password from file \"%s\": %m",
-						 pwfilename);
+						 cluster_settings.pwfilename);
 			else
 				pg_fatal("password file \"%s\" is empty",
-						 pwfilename);
+						 cluster_settings.pwfilename);
 		}
 		fclose(pwf);
 
 		(void) pg_strip_crlf(pwd1);
 	}
 
-	superuser_password = pwd1;
+	cluster_settings.superuser_password = pwd1;
 }
 
 /*
@@ -1816,7 +1835,7 @@ setup_privileges(FILE *cmdfd)
 				  CppAsString2(RELKIND_VIEW) ", " CppAsString2(RELKIND_MATVIEW) ", "
 				  CppAsString2(RELKIND_SEQUENCE) ")"
 				  "  AND relacl IS NULL;\n\n",
-				  escape_quotes(username));
+				  escape_quotes(cluster_settings.username));
 	PG_CMD_PUTS("GRANT USAGE ON SCHEMA pg_catalog, public TO PUBLIC;\n\n");
 
 	/*
@@ -1949,8 +1968,8 @@ setup_privileges(FILE *cmdfd)
  * extract the strange version of version required for information schema
  * (09.08.0007abc)
  */
-static void
-set_info_version(void)
+static char *
+get_info_version(void)
 {
 	char	   *letterversion;
 	long		major = 0,
@@ -1969,8 +1988,8 @@ set_info_version(void)
 		minor = strtol(endptr + 1, &endptr, 10);
 	if (*endptr)
 		micro = strtol(endptr + 1, &endptr, 10);
-	snprintf(infoversion, sizeof(infoversion), "%02ld.%02ld.%04ld%s",
-			 major, minor, micro, letterversion);
+	return psprintf("%02ld.%02ld.%04ld%s",
+					major, minor, micro, letterversion);
 }
 
 /*
@@ -1979,18 +1998,18 @@ set_info_version(void)
 static void
 setup_schema(FILE *cmdfd)
 {
-	setup_run_file(cmdfd, info_schema_file);
+	setup_run_file(cmdfd, input_files.info_schema_file);
 
 	PG_CMD_PRINTF("UPDATE information_schema.sql_implementation_info "
 				  "  SET character_value = '%s' "
 				  "  WHERE implementation_info_name = 'DBMS VERSION';\n\n",
-				  infoversion);
+				  get_info_version());
 
 	PG_CMD_PRINTF("COPY information_schema.sql_features "
 				  "  (feature_id, feature_name, sub_feature_id, "
 				  "  sub_feature_name, is_supported, comments) "
 				  " FROM E'%s';\n\n",
-				  escape_quotes(features_file));
+				  escape_quotes(input_files.features_file));
 }
 
 /*
@@ -2435,78 +2454,78 @@ setlocales(void)
 
 	/* set empty lc_* and datlocale values to locale config if set */
 
-	if (locale)
+	if (cluster_settings.locale)
 	{
-		if (!lc_ctype)
-			lc_ctype = locale;
-		if (!lc_collate)
-			lc_collate = locale;
-		if (!lc_numeric)
-			lc_numeric = locale;
-		if (!lc_time)
-			lc_time = locale;
-		if (!lc_monetary)
-			lc_monetary = locale;
-		if (!lc_messages)
-			lc_messages = locale;
-		if (!datlocale && locale_provider != COLLPROVIDER_LIBC)
-			datlocale = locale;
+		if (!cluster_settings.lc_ctype)
+			cluster_settings.lc_ctype = cluster_settings.locale;
+		if (!cluster_settings.lc_collate)
+			cluster_settings.lc_collate = cluster_settings.locale;
+		if (!cluster_settings.lc_numeric)
+			cluster_settings.lc_numeric = cluster_settings.locale;
+		if (!cluster_settings.lc_time)
+			cluster_settings.lc_time = cluster_settings.locale;
+		if (!cluster_settings.lc_monetary)
+			cluster_settings.lc_monetary = cluster_settings.locale;
+		if (!cluster_settings.lc_messages)
+			cluster_settings.lc_messages = cluster_settings.locale;
+		if (!cluster_settings.datlocale && cluster_settings.locale_provider != COLLPROVIDER_LIBC)
+			cluster_settings.datlocale = cluster_settings.locale;
 	}
 
 	/*
 	 * canonicalize locale names, and obtain any missing values from our
 	 * current environment
 	 */
-	check_locale_name(LC_CTYPE, lc_ctype, &canonname);
-	lc_ctype = canonname;
-	check_locale_name(LC_COLLATE, lc_collate, &canonname);
-	lc_collate = canonname;
-	check_locale_name(LC_NUMERIC, lc_numeric, &canonname);
-	lc_numeric = canonname;
-	check_locale_name(LC_TIME, lc_time, &canonname);
-	lc_time = canonname;
-	check_locale_name(LC_MONETARY, lc_monetary, &canonname);
-	lc_monetary = canonname;
+	check_locale_name(LC_CTYPE, cluster_settings.lc_ctype, &canonname);
+	cluster_settings.lc_ctype = canonname;
+	check_locale_name(LC_COLLATE, cluster_settings.lc_collate, &canonname);
+	cluster_settings.lc_collate = canonname;
+	check_locale_name(LC_NUMERIC, cluster_settings.lc_numeric, &canonname);
+	cluster_settings.lc_numeric = canonname;
+	check_locale_name(LC_TIME, cluster_settings.lc_time, &canonname);
+	cluster_settings.lc_time = canonname;
+	check_locale_name(LC_MONETARY, cluster_settings.lc_monetary, &canonname);
+	cluster_settings.lc_monetary = canonname;
 #if defined(LC_MESSAGES) && !defined(WIN32)
-	check_locale_name(LC_MESSAGES, lc_messages, &canonname);
-	lc_messages = canonname;
+	check_locale_name(LC_MESSAGES, cluster_settings.lc_messages, &canonname);
+	cluster_settings.lc_messages = canonname;
 #else
 	/* when LC_MESSAGES is not available, use the LC_CTYPE setting */
-	check_locale_name(LC_CTYPE, lc_messages, &canonname);
-	lc_messages = canonname;
+	check_locale_name(LC_CTYPE, cluster_settings.lc_messages, &canonname);
+	cluster_settings.lc_messages = canonname;
 #endif
 
-	if (locale_provider != COLLPROVIDER_LIBC && datlocale == NULL)
+	if (cluster_settings.locale_provider != COLLPROVIDER_LIBC && cluster_settings.datlocale == NULL)
 		pg_fatal("locale must be specified if provider is %s",
-				 collprovider_name(locale_provider));
+				 collprovider_name(cluster_settings.locale_provider));
 
-	if (locale_provider == COLLPROVIDER_BUILTIN)
+	if (cluster_settings.locale_provider == COLLPROVIDER_BUILTIN)
 	{
-		if (strcmp(datlocale, "C") == 0)
+		if (strcmp(cluster_settings.datlocale, "C") == 0)
 			canonname = "C";
-		else if (strcmp(datlocale, "C.UTF-8") == 0 ||
-				 strcmp(datlocale, "C.UTF8") == 0)
+		else if (strcmp(cluster_settings.datlocale, "C.UTF-8") == 0 ||
+				 strcmp(cluster_settings.datlocale, "C.UTF8") == 0)
 			canonname = "C.UTF-8";
-		else if (strcmp(datlocale, "PG_UNICODE_FAST") == 0)
+		else if (strcmp(cluster_settings.datlocale, "PG_UNICODE_FAST") == 0)
 			canonname = "PG_UNICODE_FAST";
 		else
 			pg_fatal("invalid locale name \"%s\" for builtin provider",
-					 datlocale);
+					 cluster_settings.datlocale);
 
-		datlocale = canonname;
+		cluster_settings.datlocale = canonname;
 	}
-	else if (locale_provider == COLLPROVIDER_ICU)
+	else if (cluster_settings.locale_provider == COLLPROVIDER_ICU)
 	{
 		char	   *langtag;
 
 		/* canonicalize to a language tag */
-		langtag = icu_language_tag(datlocale);
+		langtag = icu_language_tag(cluster_settings.datlocale);
 		printf(_("Using language tag \"%s\" for ICU locale \"%s\".\n"),
-			   langtag, datlocale);
-		pg_free(datlocale);
-		datlocale = langtag;
+			   langtag, cluster_settings.datlocale);
+		pg_free(cluster_settings.datlocale);
+		cluster_settings.datlocale = langtag;
 
-		icu_validate_locale(datlocale);
+		icu_validate_locale(cluster_settings.datlocale);
 
 		/*
 		 * In supported builds, the ICU locale ID will be opened during
@@ -2610,7 +2629,7 @@ check_need_password(const char *authmethodlocal, const char *authmethodhost)
 		(strcmp(authmethodhost, "md5") == 0 ||
 		 strcmp(authmethodhost, "password") == 0 ||
 		 strcmp(authmethodhost, "scram-sha-256") == 0) &&
-		!(pwprompt || pwfilename))
+		!(cluster_settings.pwprompt || cluster_settings.pwfilename))
 		pg_fatal("must specify a password for the superuser to enable password authentication");
 }
 
@@ -2620,13 +2639,13 @@ setup_pgdata(void)
 {
 	char	   *pgdata_get_env;
 
-	if (!pg_data)
+	if (!cluster_settings.pg_data)
 	{
 		pgdata_get_env = getenv("PGDATA");
 		if (pgdata_get_env && strlen(pgdata_get_env))
 		{
 			/* PGDATA found */
-			pg_data = pg_strdup(pgdata_get_env);
+			cluster_settings.pg_data = pg_strdup(pgdata_get_env);
 		}
 		else
 		{
@@ -2638,8 +2657,8 @@ setup_pgdata(void)
 		}
 	}
 
-	pgdata_native = pg_strdup(pg_data);
-	canonicalize_path(pg_data);
+	pgdata_native = pg_strdup(cluster_settings.pg_data);
+	canonicalize_path(cluster_settings.pg_data);
 
 	/*
 	 * we have to set PGDATA for postgres rather than pass it on the command
@@ -2647,7 +2666,7 @@ setup_pgdata(void)
 	 * need quotes otherwise on Windows because paths there are most likely to
 	 * have embedded spaces.
 	 */
-	if (setenv("PGDATA", pg_data, 1) != 0)
+	if (setenv("PGDATA", cluster_settings.pg_data, 1) != 0)
 		pg_fatal("could not set environment");
 }
 
@@ -2694,52 +2713,52 @@ setup_locale_encoding(void)
 {
 	setlocales();
 
-	if (locale_provider == COLLPROVIDER_LIBC &&
-		strcmp(lc_ctype, lc_collate) == 0 &&
-		strcmp(lc_ctype, lc_time) == 0 &&
-		strcmp(lc_ctype, lc_numeric) == 0 &&
-		strcmp(lc_ctype, lc_monetary) == 0 &&
-		strcmp(lc_ctype, lc_messages) == 0 &&
-		(!datlocale || strcmp(lc_ctype, datlocale) == 0))
-		printf(_("The database cluster will be initialized with locale \"%s\".\n"), lc_ctype);
+	if (cluster_settings.locale_provider == COLLPROVIDER_LIBC &&
+		strcmp(cluster_settings.lc_ctype, cluster_settings.lc_collate) == 0 &&
+		strcmp(cluster_settings.lc_ctype, cluster_settings.lc_time) == 0 &&
+		strcmp(cluster_settings.lc_ctype, cluster_settings.lc_numeric) == 0 &&
+		strcmp(cluster_settings.lc_ctype, cluster_settings.lc_monetary) == 0 &&
+		strcmp(cluster_settings.lc_ctype, cluster_settings.lc_messages) == 0 &&
+		(!cluster_settings.datlocale || strcmp(cluster_settings.lc_ctype, cluster_settings.datlocale) == 0))
+		printf(_("The database cluster will be initialized with locale \"%s\".\n"), cluster_settings.lc_ctype);
 	else
 	{
 		printf(_("The database cluster will be initialized with this locale configuration:\n"));
-		printf(_("  locale provider:   %s\n"), collprovider_name(locale_provider));
-		if (locale_provider != COLLPROVIDER_LIBC)
-			printf(_("  default collation: %s\n"), datlocale);
+		printf(_("  locale provider:   %s\n"), collprovider_name(cluster_settings.locale_provider));
+		if (cluster_settings.locale_provider != COLLPROVIDER_LIBC)
+			printf(_("  default collation: %s\n"), cluster_settings.datlocale);
 		printf(_("  LC_COLLATE:  %s\n"
 				 "  LC_CTYPE:    %s\n"
 				 "  LC_MESSAGES: %s\n"
 				 "  LC_MONETARY: %s\n"
 				 "  LC_NUMERIC:  %s\n"
 				 "  LC_TIME:     %s\n"),
-			   lc_collate,
-			   lc_ctype,
-			   lc_messages,
-			   lc_monetary,
-			   lc_numeric,
-			   lc_time);
+			   cluster_settings.lc_collate,
+			   cluster_settings.lc_ctype,
+			   cluster_settings.lc_messages,
+			   cluster_settings.lc_monetary,
+			   cluster_settings.lc_numeric,
+			   cluster_settings.lc_time);
 	}
 
-	if (!encoding)
+	if (!cluster_settings.encoding)
 	{
 		int			ctype_enc;
 
-		ctype_enc = pg_get_encoding_from_locale(lc_ctype, true);
+		ctype_enc = pg_get_encoding_from_locale(cluster_settings.lc_ctype, true);
 
 		/*
 		 * If ctype_enc=SQL_ASCII, it's compatible with any encoding. ICU does
 		 * not support SQL_ASCII, so select UTF-8 instead.
 		 */
-		if (locale_provider == COLLPROVIDER_ICU && ctype_enc == PG_SQL_ASCII)
+		if (cluster_settings.locale_provider == COLLPROVIDER_ICU && ctype_enc == PG_SQL_ASCII)
 			ctype_enc = PG_UTF8;
 
 		if (ctype_enc == -1)
 		{
 			/* Couldn't recognize the locale's codeset */
 			pg_log_error("could not find suitable encoding for locale \"%s\"",
-						 lc_ctype);
+						 cluster_settings.lc_ctype);
 			pg_log_error_hint("Rerun %s with the -E option.", progname);
 			pg_log_error_hint("Try \"%s --help\" for more information.", progname);
 			exit(1);
@@ -2759,7 +2778,7 @@ setup_locale_encoding(void)
 				   pg_encoding_to_char(encodingid));
 #else
 			pg_log_error("locale \"%s\" requires unsupported encoding \"%s\"",
-						 lc_ctype, pg_encoding_to_char(ctype_enc));
+						 cluster_settings.lc_ctype, pg_encoding_to_char(ctype_enc));
 			pg_log_error_detail("Encoding \"%s\" is not allowed as a server-side encoding.",
 								pg_encoding_to_char(ctype_enc));
 			pg_log_error_hint("Rerun %s with a different locale selection.",
@@ -2769,29 +2788,29 @@ setup_locale_encoding(void)
 		}
 		else
 		{
-			encodingid = ctype_enc;
+			cluster_settings.encodingid = ctype_enc;
 			printf(_("The default database encoding has accordingly been set to \"%s\".\n"),
-				   pg_encoding_to_char(encodingid));
+				   pg_encoding_to_char(cluster_settings.encodingid));
 		}
 	}
 	else
-		encodingid = get_encoding_id(encoding);
+		cluster_settings.encodingid = get_encoding_id(cluster_settings.encoding);
 
-	if (!check_locale_encoding(lc_ctype, encodingid) ||
-		!check_locale_encoding(lc_collate, encodingid))
+	if (!check_locale_encoding(cluster_settings.lc_ctype, cluster_settings.encodingid) ||
+		!check_locale_encoding(cluster_settings.lc_collate, cluster_settings.encodingid))
 		exit(1);				/* check_locale_encoding printed the error */
 
-	if (locale_provider == COLLPROVIDER_BUILTIN)
+	if (cluster_settings.locale_provider == COLLPROVIDER_BUILTIN)
 	{
-		if ((strcmp(datlocale, "C.UTF-8") == 0 ||
-			 strcmp(datlocale, "PG_UNICODE_FAST") == 0) &&
-			encodingid != PG_UTF8)
+		if ((strcmp(cluster_settings.datlocale, "C.UTF-8") == 0 ||
+			 strcmp(cluster_settings.datlocale, "PG_UNICODE_FAST") == 0) &&
+			cluster_settings.encodingid != PG_UTF8)
 			pg_fatal("builtin provider locale \"%s\" requires encoding \"%s\"",
-					 datlocale, "UTF-8");
+					 cluster_settings.datlocale, "UTF-8");
 	}
 
-	if (locale_provider == COLLPROVIDER_ICU &&
-		!check_icu_locale_encoding(encodingid))
+	if (cluster_settings.locale_provider == COLLPROVIDER_ICU &&
+		!check_icu_locale_encoding(cluster_settings.encodingid))
 		exit(1);
 }
 
@@ -2799,80 +2818,90 @@ setup_locale_encoding(void)
 void
 setup_data_file_paths(void)
 {
-	set_input(&bki_file, "postgres.bki");
-	set_input(&hba_file, "pg_hba.conf.sample");
-	set_input(&ident_file, "pg_ident.conf.sample");
-	set_input(&hosts_file, "pg_hosts.conf.sample");
-	set_input(&conf_file, "postgresql.conf.sample");
-	set_input(&dictionary_file, "snowball_create.sql");
-	set_input(&info_schema_file, "information_schema.sql");
-	set_input(&features_file, "sql_features.txt");
-	set_input(&system_constraints_file, "system_constraints.sql");
-	set_input(&system_functions_file, "system_functions.sql");
-	set_input(&system_views_file, "system_views.sql");
+	set_input(&input_files.bki_file, "postgres.bki");
+	set_input(&input_files.hba_file, "pg_hba.conf.sample");
+	set_input(&input_files.ident_file, "pg_ident.conf.sample");
+	set_input(&input_files.hosts_file, "pg_hosts.conf.sample");
+	set_input(&input_files.conf_file, "postgresql.conf.sample");
+	set_input(&input_files.dictionary_file, "snowball_create.sql");
+	set_input(&input_files.info_schema_file, "information_schema.sql");
+	set_input(&input_files.features_file, "sql_features.txt");
+	set_input(&input_files.system_constraints_file, "system_constraints.sql");
+	set_input(&input_files.system_functions_file, "system_functions.sql");
+	set_input(&input_files.system_views_file, "system_views.sql");
 
 	if (show_setting || debug)
 	{
 		fprintf(stderr,
 				"VERSION=%s\n"
-				"PGDATA=%s\nshare_path=%s\nPGPATH=%s\n"
-				"POSTGRES_SUPERUSERNAME=%s\nPOSTGRES_BKI=%s\n"
+				"PGDATA=%s\n"
+				"share_path=%s\n"
+				"PGPATH=%s\n"
+				"POSTGRES_SUPERUSERNAME=%s\n"
+				"POSTGRES_BKI=%s\n"
 				"POSTGRESQL_CONF_SAMPLE=%s\n"
-				"PG_HBA_SAMPLE=%s\nPG_IDENT_SAMPLE=%s\nPG_HOSTS_SAMPLE=%s\n",
+				"PG_HBA_SAMPLE=%s\n"
+				"PG_IDENT_SAMPLE=%s\n"
+				"PG_HOSTS_SAMPLE=%s\n",
 				PG_VERSION,
-				pg_data, share_path, bin_path,
-				username, bki_file,
-				conf_file,
-				hba_file, ident_file, hosts_file);
+				cluster_settings.pg_data,
+				share_path,
+				bin_path,
+				cluster_settings.username,
+				input_files.bki_file,
+				input_files.conf_file,
+				input_files.hba_file,
+				input_files.ident_file,
+				input_files.hosts_file);
 		if (show_setting)
 			exit(0);
 	}
 
-	check_input(bki_file);
-	check_input(hba_file);
-	check_input(ident_file);
-	check_input(hosts_file);
-	check_input(conf_file);
-	check_input(dictionary_file);
-	check_input(info_schema_file);
-	check_input(features_file);
-	check_input(system_constraints_file);
-	check_input(system_functions_file);
-	check_input(system_views_file);
+	check_input(input_files.bki_file);
+	check_input(input_files.hba_file);
+	check_input(input_files.ident_file);
+	check_input(input_files.hosts_file);
+	check_input(input_files.conf_file);
+	check_input(input_files.dictionary_file);
+	check_input(input_files.info_schema_file);
+	check_input(input_files.features_file);
+	check_input(input_files.system_constraints_file);
+	check_input(input_files.system_functions_file);
+	check_input(input_files.system_views_file);
 }
 
 
 void
 setup_text_search(void)
 {
-	if (!default_text_search_config)
+	if (!cluster_settings.default_text_search_config)
 	{
-		default_text_search_config = find_matching_ts_config(lc_ctype);
-		if (!default_text_search_config)
+		cluster_settings.default_text_search_config = find_matching_ts_config(cluster_settings.lc_ctype);
+		if (!cluster_settings.default_text_search_config)
 		{
 			pg_log_info("could not find suitable text search configuration for locale \"%s\"",
-						lc_ctype);
-			default_text_search_config = "simple";
+						cluster_settings.lc_ctype);
+			cluster_settings.default_text_search_config = "simple";
 		}
 	}
 	else
 	{
-		const char *checkmatch = find_matching_ts_config(lc_ctype);
+		const char *checkmatch = find_matching_ts_config(cluster_settings.lc_ctype);
 
 		if (checkmatch == NULL)
 		{
 			pg_log_warning("suitable text search configuration for locale \"%s\" is unknown",
-						   lc_ctype);
+						   cluster_settings.lc_ctype);
 		}
-		else if (strcmp(checkmatch, default_text_search_config) != 0)
+		else if (strcmp(checkmatch, cluster_settings.default_text_search_config) != 0)
 		{
 			pg_log_warning("specified text search configuration \"%s\" might not match locale \"%s\"",
-						   default_text_search_config, lc_ctype);
+						   cluster_settings.default_text_search_config, cluster_settings.lc_ctype);
 		}
 	}
 
 	printf(_("The default text search configuration will be set to \"%s\".\n"),
-		   default_text_search_config);
+		   cluster_settings.default_text_search_config);
 }
 
 
@@ -2901,54 +2930,54 @@ create_data_directory(void)
 {
 	int			ret;
 
-	switch ((ret = pg_check_dir(pg_data)))
+	switch ((ret = pg_check_dir(cluster_settings.pg_data)))
 	{
 		case 0:
 			/* PGDATA not there, must create it */
 			printf(_("creating directory %s ... "),
-				   pg_data);
+				   cluster_settings.pg_data);
 			fflush(stdout);
 
-			if (pg_mkdir_p(pg_data, pg_dir_create_mode) != 0)
-				pg_fatal("could not create directory \"%s\": %m", pg_data);
+			if (pg_mkdir_p(cluster_settings.pg_data, pg_dir_create_mode) != 0)
+				pg_fatal("could not create directory \"%s\": %m", cluster_settings.pg_data);
 			else
 				check_ok();
 
-			made_new_pgdata = true;
+			cleanup_info.made_new_pgdata = true;
 			break;
 
 		case 1:
 			/* Present but empty, fix permissions and use it */
 			printf(_("fixing permissions on existing directory %s ... "),
-				   pg_data);
+				   cluster_settings.pg_data);
 			fflush(stdout);
 
-			if (chmod(pg_data, pg_dir_create_mode) != 0)
+			if (chmod(cluster_settings.pg_data, pg_dir_create_mode) != 0)
 				pg_fatal("could not change permissions of directory \"%s\": %m",
-						 pg_data);
+						 cluster_settings.pg_data);
 			else
 				check_ok();
 
-			found_existing_pgdata = true;
+			cleanup_info.found_existing_pgdata = true;
 			break;
 
 		case 2:
 		case 3:
 		case 4:
 			/* Present and not empty */
-			pg_log_error("directory \"%s\" exists but is not empty", pg_data);
+			pg_log_error("directory \"%s\" exists but is not empty", cluster_settings.pg_data);
 			if (ret != 4)
 				warn_on_mount_point(ret);
 			else
 				pg_log_error_hint("If you want to create a new database system, either remove or empty "
 								  "the directory \"%s\" or run %s "
 								  "with an argument other than \"%s\".",
-								  pg_data, progname, pg_data);
+								  cluster_settings.pg_data, progname, cluster_settings.pg_data);
 			exit(1);			/* no further message needed */
 
 		default:
 			/* Trouble accessing directory */
-			pg_fatal("could not access directory \"%s\": %m", pg_data);
+			pg_fatal("could not access directory \"%s\": %m", cluster_settings.pg_data);
 	}
 }
 
@@ -2960,68 +2989,68 @@ create_xlog_or_symlink(void)
 	char	   *subdirloc;
 
 	/* form name of the place for the subdirectory or symlink */
-	subdirloc = psprintf("%s/pg_wal", pg_data);
+	subdirloc = psprintf("%s/pg_wal", cluster_settings.pg_data);
 
-	if (xlog_dir)
+	if (cluster_settings.xlog_dir)
 	{
 		int			ret;
 
 		/* clean up xlog directory name, check it's absolute */
-		canonicalize_path(xlog_dir);
-		if (!is_absolute_path(xlog_dir))
+		canonicalize_path(cluster_settings.xlog_dir);
+		if (!is_absolute_path(cluster_settings.xlog_dir))
 			pg_fatal("WAL directory location must be an absolute path");
 
 		/* check if the specified xlog directory exists/is empty */
-		switch ((ret = pg_check_dir(xlog_dir)))
+		switch ((ret = pg_check_dir(cluster_settings.xlog_dir)))
 		{
 			case 0:
 				/* xlog directory not there, must create it */
 				printf(_("creating directory %s ... "),
-					   xlog_dir);
+					   cluster_settings.xlog_dir);
 				fflush(stdout);
 
-				if (pg_mkdir_p(xlog_dir, pg_dir_create_mode) != 0)
+				if (pg_mkdir_p(cluster_settings.xlog_dir, pg_dir_create_mode) != 0)
 					pg_fatal("could not create directory \"%s\": %m",
-							 xlog_dir);
+							 cluster_settings.xlog_dir);
 				else
 					check_ok();
 
-				made_new_xlogdir = true;
+				cleanup_info.made_new_xlogdir = true;
 				break;
 
 			case 1:
 				/* Present but empty, fix permissions and use it */
 				printf(_("fixing permissions on existing directory %s ... "),
-					   xlog_dir);
+					   cluster_settings.xlog_dir);
 				fflush(stdout);
 
-				if (chmod(xlog_dir, pg_dir_create_mode) != 0)
+				if (chmod(cluster_settings.xlog_dir, pg_dir_create_mode) != 0)
 					pg_fatal("could not change permissions of directory \"%s\": %m",
-							 xlog_dir);
+							 cluster_settings.xlog_dir);
 				else
 					check_ok();
 
-				found_existing_xlogdir = true;
+				cleanup_info.found_existing_xlogdir = true;
 				break;
 
 			case 2:
 			case 3:
 			case 4:
 				/* Present and not empty */
-				pg_log_error("directory \"%s\" exists but is not empty", xlog_dir);
+				pg_log_error("directory \"%s\" exists but is not empty", cluster_settings.xlog_dir);
 				if (ret != 4)
 					warn_on_mount_point(ret);
 				else
 					pg_log_error_hint("If you want to store the WAL there, either remove or empty the directory \"%s\".",
-									  xlog_dir);
+									  cluster_settings.xlog_dir);
 				exit(1);
 
 			default:
 				/* Trouble accessing directory */
-				pg_fatal("could not access directory \"%s\": %m", xlog_dir);
+				pg_fatal("could not access directory \"%s\": %m", cluster_settings.xlog_dir);
 		}
 
-		if (symlink(xlog_dir, subdirloc) != 0)
+		if (symlink(cluster_settings.xlog_dir, subdirloc) != 0)
 			pg_fatal("could not create symbolic link \"%s\": %m",
 					 subdirloc);
 	}
@@ -3078,7 +3107,7 @@ initialize_data_directory(void)
 	{
 		char	   *path;
 
-		path = psprintf("%s/%s", pg_data, subdirs[i]);
+		path = psprintf("%s/%s", cluster_settings.pg_data, subdirs[i]);
 
 		/*
 		 * The parent directory already exists, so we only need mkdir() not
@@ -3125,9 +3154,9 @@ initialize_data_directory(void)
 
 	setup_auth(cmdfd);
 
-	setup_run_file(cmdfd, system_constraints_file);
+	setup_run_file(cmdfd, input_files.system_constraints_file);
 
-	setup_run_file(cmdfd, system_functions_file);
+	setup_run_file(cmdfd, input_files.system_functions_file);
 
 	setup_depend(cmdfd);
 
@@ -3136,13 +3165,13 @@ initialize_data_directory(void)
 	 * They are all droppable at the whim of the DBA.
 	 */
 
-	setup_run_file(cmdfd, system_views_file);
+	setup_run_file(cmdfd, input_files.system_views_file);
 
 	setup_description(cmdfd);
 
 	setup_collation(cmdfd);
 
-	setup_run_file(cmdfd, dictionary_file);
+	setup_run_file(cmdfd, input_files.dictionary_file);
 
 	setup_privileges(cmdfd);
 
@@ -3220,6 +3249,13 @@ main(int argc, char *argv[])
 	PQExpBuffer start_db_cmd;
 	char		pg_ctl_path[MAXPGPATH];
 
+	bool builtin_locale_specified = false;
+	bool icu_locale_specified = false;
+
+	bool do_sync = true;
+	bool sync_only = false;
+	bool noinstructions = false;
+
 	/*
 	 * Ensure that buffering behavior of stdout matches what it is in
 	 * interactive usage (at least on most platforms).  This prevents
@@ -3254,23 +3290,23 @@ main(int argc, char *argv[])
 		switch (c)
 		{
 			case 'A':
-				authmethodlocal = authmethodhost = pg_strdup(optarg);
+				cluster_settings.authmethodlocal = cluster_settings.authmethodhost = pg_strdup(optarg);
 
 				/*
 				 * When ident is specified, use peer for local connections.
 				 * Mirrored, when peer is specified, use ident for TCP/IP
 				 * connections.
 				 */
-				if (strcmp(authmethodhost, "ident") == 0)
-					authmethodlocal = "peer";
-				else if (strcmp(authmethodlocal, "peer") == 0)
-					authmethodhost = "ident";
+				if (strcmp(cluster_settings.authmethodhost, "ident") == 0)
+					cluster_settings.authmethodlocal = "peer";
+				else if (strcmp(cluster_settings.authmethodlocal, "peer") == 0)
+					cluster_settings.authmethodhost = "ident";
 				break;
 			case 10:
-				authmethodlocal = pg_strdup(optarg);
+				cluster_settings.authmethodlocal = pg_strdup(optarg);
 				break;
 			case 11:
-				authmethodhost = pg_strdup(optarg);
+				cluster_settings.authmethodhost = pg_strdup(optarg);
 				break;
 			case 'c':
 				{
@@ -3285,22 +3321,22 @@ main(int argc, char *argv[])
 						exit(1);
 					}
 					*equals++ = '\0';	/* terminate variable name */
-					add_stringlist_item(&extra_guc_names, buf);
-					add_stringlist_item(&extra_guc_values, equals);
+					add_stringlist_item(&cluster_settings.extra_guc_names, buf);
+					add_stringlist_item(&cluster_settings.extra_guc_values, equals);
 					pg_free(buf);
 				}
 				break;
 			case 'D':
-				pg_data = pg_strdup(optarg);
+				cluster_settings.pg_data = pg_strdup(optarg);
 				break;
 			case 'E':
-				encoding = pg_strdup(optarg);
+				cluster_settings.encoding = pg_strdup(optarg);
 				break;
 			case 'W':
-				pwprompt = true;
+				cluster_settings.pwprompt = true;
 				break;
 			case 'U':
-				username = pg_strdup(optarg);
+				cluster_settings.username = pg_strdup(optarg);
 				break;
 			case 'd':
 				debug = true;
@@ -3317,49 +3353,49 @@ main(int argc, char *argv[])
 				sync_only = true;
 				break;
 			case 'k':
-				data_checksums = true;
+				cluster_settings.data_checksums = true;
 				break;
 			case 'L':
 				share_path = pg_strdup(optarg);
 				break;
 			case 1:
-				locale = pg_strdup(optarg);
+				cluster_settings.locale = pg_strdup(optarg);
 				break;
 			case 2:
-				lc_collate = pg_strdup(optarg);
+				cluster_settings.lc_collate = pg_strdup(optarg);
 				break;
 			case 3:
-				lc_ctype = pg_strdup(optarg);
+				cluster_settings.lc_ctype = pg_strdup(optarg);
 				break;
 			case 4:
-				lc_monetary = pg_strdup(optarg);
+				cluster_settings.lc_monetary = pg_strdup(optarg);
 				break;
 			case 5:
-				lc_numeric = pg_strdup(optarg);
+				cluster_settings.lc_numeric = pg_strdup(optarg);
 				break;
 			case 6:
-				lc_time = pg_strdup(optarg);
+				cluster_settings.lc_time = pg_strdup(optarg);
 				break;
 			case 7:
-				lc_messages = pg_strdup(optarg);
+				cluster_settings.lc_messages = pg_strdup(optarg);
 				break;
 			case 8:
-				locale = "C";
+				cluster_settings.locale = "C";
 				break;
 			case 9:
-				pwfilename = pg_strdup(optarg);
+				cluster_settings.pwfilename = pg_strdup(optarg);
 				break;
 			case 's':
 				show_setting = true;
 				break;
 			case 'T':
-				default_text_search_config = pg_strdup(optarg);
+				cluster_settings.default_text_search_config = pg_strdup(optarg);
 				break;
 			case 'X':
-				xlog_dir = pg_strdup(optarg);
+				cluster_settings.xlog_dir = pg_strdup(optarg);
 				break;
 			case 12:
-				if (!option_parse_int(optarg, "--wal-segsize", 1, 1024, &wal_segment_size_mb))
+				if (!option_parse_int(optarg, "--wal-segsize", 1, 1024, &cluster_settings.wal_segment_size_mb))
 					exit(1);
 				break;
 			case 13:
@@ -3375,31 +3411,31 @@ main(int argc, char *argv[])
 				break;
 			case 15:
 				if (strcmp(optarg, "builtin") == 0)
-					locale_provider = COLLPROVIDER_BUILTIN;
+					cluster_settings.locale_provider = COLLPROVIDER_BUILTIN;
 				else if (strcmp(optarg, "icu") == 0)
-					locale_provider = COLLPROVIDER_ICU;
+					cluster_settings.locale_provider = COLLPROVIDER_ICU;
 				else if (strcmp(optarg, "libc") == 0)
-					locale_provider = COLLPROVIDER_LIBC;
+					cluster_settings.locale_provider = COLLPROVIDER_LIBC;
 				else
 					pg_fatal("unrecognized locale provider: %s", optarg);
 				break;
 			case 16:
-				datlocale = pg_strdup(optarg);
+				cluster_settings.datlocale = pg_strdup(optarg);
 				builtin_locale_specified = true;
 				break;
 			case 17:
-				datlocale = pg_strdup(optarg);
+				cluster_settings.datlocale = pg_strdup(optarg);
 				icu_locale_specified = true;
 				break;
 			case 18:
-				icu_rules = pg_strdup(optarg);
+				cluster_settings.icu_rules = pg_strdup(optarg);
 				break;
 			case 19:
 				if (!parse_sync_method(optarg, &sync_method))
 					exit(1);
 				break;
 			case 20:
-				data_checksums = false;
+				cluster_settings.data_checksums = false;
 				break;
 			case 21:
 				sync_data_files = false;
@@ -3416,9 +3452,9 @@ main(int argc, char *argv[])
 	 * Non-option argument specifies data directory as long as it wasn't
 	 * already specified with -D / --pgdata
 	 */
-	if (optind < argc && !pg_data)
+	if (optind < argc && !cluster_settings.pg_data)
 	{
-		pg_data = pg_strdup(argv[optind]);
+		cluster_settings.pg_data = pg_strdup(argv[optind]);
 		optind++;
 	}
 
@@ -3430,15 +3466,15 @@ main(int argc, char *argv[])
 		exit(1);
 	}
 
-	if (builtin_locale_specified && locale_provider != COLLPROVIDER_BUILTIN)
+	if (builtin_locale_specified && cluster_settings.locale_provider != COLLPROVIDER_BUILTIN)
 		pg_fatal("%s cannot be specified unless locale provider \"%s\" is chosen",
 				 "--builtin-locale", "builtin");
 
-	if (icu_locale_specified && locale_provider != COLLPROVIDER_ICU)
+	if (icu_locale_specified && cluster_settings.locale_provider != COLLPROVIDER_ICU)
 		pg_fatal("%s cannot be specified unless locale provider \"%s\" is chosen",
 				 "--icu-locale", "icu");
 
-	if (icu_rules && locale_provider != COLLPROVIDER_ICU)
+	if (cluster_settings.icu_rules && cluster_settings.locale_provider != COLLPROVIDER_ICU)
 		pg_fatal("%s cannot be specified unless locale provider \"%s\" is chosen",
 				 "--icu-rules", "icu");
 
@@ -3450,28 +3486,28 @@ main(int argc, char *argv[])
 		setup_pgdata();
 
 		/* must check that directory is readable */
-		if (pg_check_dir(pg_data) <= 0)
-			pg_fatal("could not access directory \"%s\": %m", pg_data);
+		if (pg_check_dir(cluster_settings.pg_data) <= 0)
+			pg_fatal("could not access directory \"%s\": %m", cluster_settings.pg_data);
 
 		fputs(_("syncing data to disk ... "), stdout);
 		fflush(stdout);
-		sync_pgdata(pg_data, PG_VERSION_NUM, sync_method, sync_data_files);
+		sync_pgdata(cluster_settings.pg_data, PG_VERSION_NUM, sync_method, sync_data_files);
 		check_ok();
 		return 0;
 	}
 
-	if (pwprompt && pwfilename)
+	if (cluster_settings.pwprompt && cluster_settings.pwfilename)
 		pg_fatal("password prompt and password file cannot be specified together");
 
-	check_authmethod_unspecified(&authmethodlocal);
-	check_authmethod_unspecified(&authmethodhost);
+	check_authmethod_unspecified(&cluster_settings.authmethodlocal);
+	check_authmethod_unspecified(&cluster_settings.authmethodhost);
 
-	check_authmethod_valid(authmethodlocal, auth_methods_local, "local");
-	check_authmethod_valid(authmethodhost, auth_methods_host, "host");
+	check_authmethod_valid(cluster_settings.authmethodlocal, auth_methods_local, "local");
+	check_authmethod_valid(cluster_settings.authmethodhost, auth_methods_host, "host");
 
-	check_need_password(authmethodlocal, authmethodhost);
+	check_need_password(cluster_settings.authmethodlocal, cluster_settings.authmethodhost);
 
-	if (!IsValidWalSegSize(wal_segment_size_mb * 1024 * 1024))
+	if (!IsValidWalSegSize(cluster_settings.wal_segment_size_mb * 1024 * 1024))
 		pg_fatal("argument of %s must be a power of two between 1 and 1024", "--wal-segsize");
 
 	get_restricted_token();
@@ -3481,18 +3517,16 @@ main(int argc, char *argv[])
 	setup_bin_paths(argv[0]);
 
 	effective_user = get_id();
-	if (!username)
-		username = effective_user;
+	if (!cluster_settings.username)
+		cluster_settings.username = effective_user;
 
-	if (strncmp(username, "pg_", 3) == 0)
-		pg_fatal("superuser name \"%s\" is disallowed; role names cannot begin with \"pg_\"", username);
+	if (strncmp(cluster_settings.username, "pg_", 3) == 0)
+		pg_fatal("superuser name \"%s\" is disallowed; role names cannot begin with \"pg_\"", cluster_settings.username);
 
 	printf(_("The files belonging to this database system will be owned "
 			 "by user \"%s\".\n"
 			 "This user must also own the server process.\n\n"),
 		   effective_user);
-
-	set_info_version();
 
 	setup_data_file_paths();
 
@@ -3502,12 +3536,12 @@ main(int argc, char *argv[])
 
 	printf("\n");
 
-	if (data_checksums)
+	if (cluster_settings.data_checksums)
 		printf(_("Data page checksums are enabled.\n"));
 	else
 		printf(_("Data page checksums are disabled.\n"));
 
-	if (pwprompt || pwfilename)
+	if (cluster_settings.pwprompt || cluster_settings.pwfilename)
 		get_su_pwd();
 
 	printf("\n");
@@ -3518,7 +3552,7 @@ main(int argc, char *argv[])
 	{
 		fputs(_("syncing data to disk ... "), stdout);
 		fflush(stdout);
-		sync_pgdata(pg_data, PG_VERSION_NUM, sync_method, sync_data_files);
+		sync_pgdata(cluster_settings.pg_data, PG_VERSION_NUM, sync_method, sync_data_files);
 		check_ok();
 	}
 	else
@@ -3568,6 +3602,6 @@ main(int argc, char *argv[])
 	}
 
 
-	success = true;
+	cleanup_info.success = true;
 	return 0;
 }
