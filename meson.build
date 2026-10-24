@@ -2327,6 +2327,16 @@ if cc.get_id() == 'msvc'
 
     # Turn this into an error, to match other compilers (as of C99)
     '/we4013', # 'function' undefined; assuming extern returning int' [like -Wimplicit-function-declaration]
+
+    # Warnings from static analyzer
+    '/wd6001', # Using uninitialized memory 'variable'
+    '/wd6011', # Dereferencing NULL pointer
+    '/wd6031', # Return value ignored
+    '/wd6387', # 'argument' may be 'value': this does not adhere to the specification for the function 'function name'
+    '/wd28182',# Dereferencing NULL pointer
+    '/wd28199',# Using possibly uninitialized memory
+
+    '/analyze:stacksize 65673',
   ]
 
   msvc_c_warning_flags = [
