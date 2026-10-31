@@ -27,8 +27,14 @@ GETTEXT_FLAGS    = $(BACKEND_COMMON_GETTEXT_FLAGS) \
                    json_token_error:2:c-format \
                    error_cb:2:c-format
 
+# Collect files from both the source and the build directory (the latter
+# for generated files in vpath builds), with names relative to the current
+# directory, so that the result doesn't depend on the build directory
+# location.
+gettext_find_args = . ../common ../port ../include/ -type f \( -name '*.c' -o -name "proctypelist.h" \) -print
+
 gettext-files: generated-parser-sources generated-headers
-	find $(srcdir) $(srcdir)/../common $(srcdir)/../port $(srcdir)/../include/ -type f \( -name '*.c' -o -name "proctypelist.h" \) -print | LC_ALL=C sort >$@
+	{ (cd $(srcdir) && find $(gettext_find_args)); find $(gettext_find_args); } | LC_ALL=C sort -u >$@
 
 my-clean:
 	rm -f gettext-files
