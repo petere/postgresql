@@ -1445,52 +1445,46 @@ PQenv2encoding(void)
 #ifdef ENABLE_NLS
 
 static void
+libpq_binddomain_once(void)
+{
+	const char *ldir;
+
+	/*
+	 * No relocatable lookup here because the calling executable could be
+	 * anywhere
+	 */
+	ldir = getenv("PGLOCALEDIR");
+	if (!ldir)
+		ldir = LOCALEDIR;
+	bindtextdomain(PG_TEXTDOMAIN("libpq"), ldir);
+}
+
+static void
 libpq_binddomain(void)
 {
 	/*
 	 * At least on Windows, there are gettext implementations that fail if
-	 * multiple threads call bindtextdomain() concurrently.  Use a mutex and
-	 * flag variable to ensure that we call it just once per process.  It is
+	 * multiple threads call bindtextdomain() concurrently.  Use
+	 * pthread_once() to ensure that we call it just once per process.  It is
 	 * not known that similar bugs exist on non-Windows platforms, but we
 	 * might as well do it the same way everywhere.
 	 */
-	static volatile bool already_bound = false;
-	static pthread_mutex_t binddomain_mutex = PTHREAD_MUTEX_INITIALIZER;
+	static pthread_once_t binddomain_once = PTHREAD_ONCE_INIT;
 
-	if (!already_bound)
-	{
-		/* bindtextdomain() does not preserve errno */
+	/* bindtextdomain() does not preserve errno */
 #ifdef WIN32
-		int			save_errno = GetLastError();
+	int			save_errno = GetLastError();
 #else
-		int			save_errno = errno;
+	int			save_errno = errno;
 #endif
 
-		(void) pthread_mutex_lock(&binddomain_mutex);
-
-		if (!already_bound)
-		{
-			const char *ldir;
-
-			/*
-			 * No relocatable lookup here because the calling executable could
-			 * be anywhere
-			 */
-			ldir = getenv("PGLOCALEDIR");
-			if (!ldir)
-				ldir = LOCALEDIR;
-			bindtextdomain(PG_TEXTDOMAIN("libpq"), ldir);
-			already_bound = true;
-		}
-
-		(void) pthread_mutex_unlock(&binddomain_mutex);
+	(void) pthread_once(&binddomain_once, libpq_binddomain_once);
 
 #ifdef WIN32
-		SetLastError(save_errno);
+	SetLastError(save_errno);
 #else
-		errno = save_errno;
+	errno = save_errno;
 #endif
-	}
 }
 
 char *
