@@ -35,6 +35,12 @@ OBJS = \
 	sqlda.o \
 	typename.o
 
+ifeq ($(PORTNAME), win32)
+# use libpq's pthread emulation, see ecpg-pthread-win32.h
+OBJS += pthread-win32.o
+override CPPFLAGS += -I$(top_srcdir)/src/port
+endif
+
 SHLIB_LINK_INTERNAL = -L../pgtypeslib -lpgtypes $(libpq_pgport_shlib)
 SHLIB_LINK = $(filter -lintl -lm, $(LIBS)) $(PTHREAD_LIBS)
 SHLIB_PREREQS = submake-libpq submake-pgtypeslib
@@ -52,6 +58,10 @@ submake-pgtypeslib:
 # Shared library stuff
 include $(top_srcdir)/src/Makefile.shlib
 
+# We symlink pthread-win32.c from libpq and recompile it here
+pthread-win32.c: % : $(top_srcdir)/src/interfaces/libpq/%
+	rm -f $@ && $(LN_S) $< .
+
 # Make dependency on pg_config_paths.h visible.
 misc.o: misc.c $(top_builddir)/src/port/pg_config_paths.h
 
@@ -65,4 +75,4 @@ installdirs: installdirs-lib
 uninstall: uninstall-lib
 
 clean distclean: clean-lib
-	rm -f $(OBJS)
+	rm -f $(OBJS) pthread-win32.c

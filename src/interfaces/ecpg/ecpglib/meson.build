@@ -19,6 +19,9 @@ ecpglib_c_args = ['-DSO_MAJOR_VERSION=6']
 export_file = custom_target('libecpg.exports', kwargs: gen_export_kwargs)
 
 if host_system == 'windows'
+  # use libpq's pthread emulation, see ecpg-pthread-win32.h
+  ecpglib_sources += files('../../libpq/pthread-win32.c')
+  ecpglib_inc += include_directories('../../../port')
   ecpglib_so_sources += rc_lib_gen.process(win32ver_rc, extra_args: [
     '--NAME', 'libecpg',
     '--FILEDESC', 'ECPG - embedded SQL in C',])
