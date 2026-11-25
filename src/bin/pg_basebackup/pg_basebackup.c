@@ -516,6 +516,17 @@ reached_end_position(XLogRecPtr segendpos, uint32 timeline,
 #endif
 	}
 
+#ifdef WIN32
+
+	/*
+	 * The main thread stores xlogendptr before setting has_xlogendptr.
+	 * Reading the volatile flag doesn't guarantee that we also see the new
+	 * value of xlogendptr (MSVC only provides that for volatile accesses on
+	 * x86/x64, and only by default), so we need a barrier here.
+	 */
+	MemoryBarrier();
+#endif
+
 	/*
 	 * At this point we have an end pointer, so compare it to the current
 	 * position to figure out if it's time to stop.
