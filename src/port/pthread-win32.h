@@ -9,14 +9,9 @@
 
 typedef ULONG pthread_key_t;
 
-typedef struct pthread_mutex_t
-{
-	/* initstate = 0: not initialized; 1: init done; 2: init in progress */
-	LONG		initstate;
-	CRITICAL_SECTION csection;
-} pthread_mutex_t;
+typedef SRWLOCK pthread_mutex_t;
 
-#define PTHREAD_MUTEX_INITIALIZER	{ 0 }
+#define PTHREAD_MUTEX_INITIALIZER	SRWLOCK_INIT
 
 typedef INIT_ONCE pthread_once_t;
 

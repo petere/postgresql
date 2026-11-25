@@ -51,34 +51,21 @@ pthread_getspecific(pthread_key_t key)
 int
 pthread_mutex_init(pthread_mutex_t *mp, void *attr)
 {
-	mp->initstate = 0;
+	InitializeSRWLock(mp);
 	return 0;
 }
 
 int
 pthread_mutex_lock(pthread_mutex_t *mp)
 {
-	/* Initialize the csection if not already done */
-	if (mp->initstate != 1)
-	{
-		LONG		istate;
-
-		while ((istate = InterlockedExchange(&mp->initstate, 2)) == 2)
-			Sleep(0);			/* wait, another thread is doing this */
-		if (istate != 1)
-			InitializeCriticalSection(&mp->csection);
-		InterlockedExchange(&mp->initstate, 1);
-	}
-	EnterCriticalSection(&mp->csection);
+	AcquireSRWLockExclusive(mp);
 	return 0;
 }
 
 int
 pthread_mutex_unlock(pthread_mutex_t *mp)
 {
-	if (mp->initstate != 1)
-		return EINVAL;
-	LeaveCriticalSection(&mp->csection);
+	ReleaseSRWLockExclusive(mp);
 	return 0;
 }
 
