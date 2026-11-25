@@ -20,15 +20,32 @@ pthread_self(void)
 	return GetCurrentThreadId();
 }
 
-void
-pthread_setspecific(pthread_key_t key, void *val)
+/*
+ * XXX The destructor is never called.
+ */
+int
+pthread_key_create(pthread_key_t *key, void (*destructor) (void *))
 {
+	DWORD		index = TlsAlloc();
+
+	if (index == TLS_OUT_OF_INDEXES)
+		return EAGAIN;
+	*key = index;
+	return 0;
+}
+
+int
+pthread_setspecific(pthread_key_t key, const void *value)
+{
+	if (!TlsSetValue(key, (LPVOID) value))
+		return EINVAL;
+	return 0;
 }
 
 void *
 pthread_getspecific(pthread_key_t key)
 {
-	return NULL;
+	return TlsGetValue(key);
 }
 
 int
@@ -62,5 +79,22 @@ pthread_mutex_unlock(pthread_mutex_t *mp)
 	if (mp->initstate != 1)
 		return EINVAL;
 	LeaveCriticalSection(&mp->csection);
+	return 0;
+}
+
+static BOOL CALLBACK
+pthread_once_callback(PINIT_ONCE once, PVOID param, PVOID *context)
+{
+	void		(**init_routine) (void) = param;
+
+	(*init_routine) ();
+	return TRUE;
+}
+
+int
+pthread_once(pthread_once_t *once, void (*init_routine) (void))
+{
+	if (!InitOnceExecuteOnce(once, pthread_once_callback, &init_routine, NULL))
+		return EINVAL;
 	return 0;
 }
