@@ -2365,6 +2365,15 @@ if cc.get_id() == 'msvc'
     '/D_CRT_NONSTDC_NO_DEPRECATE',
   ]
 
+  # On x86/x64, MSVC by default gives volatile accesses acquire/release
+  # semantics, but not on ARM.  Use standard volatile semantics everywhere,
+  # matching other compilers, so that code accidentally relying on the
+  # nonstandard behavior isn't masked on x86/x64.
+  cflags += '/volatile:iso'
+  if have_cxx
+    cxxflags += '/volatile:iso'
+  endif
+
   # We never need export libraries. As link.exe reports their creation, they
   # are unnecessarily noisy. Similarly, we don't need import library for
   # modules, we only import them dynamically, and they're also noisy.
